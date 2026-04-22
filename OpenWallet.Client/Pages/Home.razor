@@ -1,0 +1,316 @@
+@page "/"
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.DTOs
+@implements IDisposable
+@inject ApiClient Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject PrivacyService Privacy
+
+<PageTitle>Dashboard - OpenWallet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+    <h4 class="mb-0 fw-semibold">Dashboard</h4>
+    <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-secondary btn-sm @(filtersOpen ? "active" : "")"
+                @onclick="() => filtersOpen = !filtersOpen" title="Filters">
+            <i class="bi bi-sliders"></i>
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="() => Privacy.ToggleAsync()" title="Toggle privacy">
+            <i class="bi @(Privacy.IsMasked ? "bi-eye-slash" : "bi-eye")"></i>
+        </button>
+    </div>
+</div>
+
+@if (filtersOpen)
+{
+    <div class="widget-card mb-4">
+        <RecordFilterPanel Filter="filter"
+                           Accounts="accounts"
+                           Categories="categories"
+                           Stores="stores"
+                           OnSearch="ApplyFilter"
+                           OnReset="ResetFilter" />
+    </div>
+}
+
+@if (loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary"></div>
+    </div>
+}
+else if (!string.IsNullOrEmpty(loadError))
+{
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle me-2"></i>Failed to load dashboard: @loadError
+    </div>
+}
+else if (dashboard != null)
+{
+    <div class="row g-3 mb-4">
+        @foreach (AccountDto account in dashboard.Accounts)
+        {
+            <div class="col-md-6 col-lg-4 col-xl-3">
+                <div class="widget-card h-100">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="account-color-dot" style="background-color: @account.Color"></span>
+                        <span class="fw-semibold">@account.Name</span>
+                        <span class="ms-auto badge bg-secondary text-white small">@account.Currency</span>
+                    </div>
+                    <div class="fs-5 fw-bold @(Privacy.IsMasked ? "masked" : "")">
+                        @FormatAmount(account.CurrentBalance, account.Currency)
+                    </div>
+                </div>
+            </div>
+        }
+        <div class="col-md-6 col-lg-4 col-xl-3">
+            <div class="widget-card h-100 border-primary">
+                <div class="text-muted small mb-1">Total Balance</div>
+                <div class="fs-4 fw-bold text-primary @(Privacy.IsMasked ? "masked" : "")">
+                    @(Privacy.IsMasked ? "•••••" : dashboard.TotalBalance.ToString("N2"))
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-8">
+            <div class="widget-card">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="mb-0 fw-semibold">Recent Records</h6>
+                    <div class="d-flex gap-2">
+                        <a href="records?add=true" class="btn btn-sm btn-primary">
+                            <i class="bi bi-plus-lg me-1"></i>Add
+                        </a>
+                        <a href="records" class="btn btn-sm btn-outline-secondary">View all</a>
+                    </div>
+                </div>
+                @if (!FilteredRecords.Any())
+                {
+                    <p class="text-muted small mb-0">No records yet.</p>
+                }
+                else
+                {
+                    @foreach (RecordDto r in FilteredRecords)
+                    {
+                        <RecordRow Record="r" OnClick="GoToRecords" />
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="widget-card h-100">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h6 class="mb-0 fw-semibold">Expenses</h6>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn @(pieTab == "category" ? "btn-primary" : "btn-outline-secondary")"
+                                @onclick="@(() => pieTab = "category")">Category</button>
+                        <button class="btn @(pieTab == "tag" ? "btn-primary" : "btn-outline-secondary")"
+                                @onclick="@(() => pieTab = "tag")">Tag</button>
+                    </div>
+                </div>
+                <canvas id="pieChart" height="200"></canvas>
+                <div class="mt-3">
+                    @if (pieTab == "category")
+                    {
+                        @foreach (CategoryExpenseDto item in FilteredExpensesByCategory.Take(5))
+                        {
+                            <div class="d-flex align-items-center justify-content-between mb-1 small">
+                                <div>
+                                    <span class="pie-legend-dot" style="background-color: @item.CategoryColor"></span>
+                                    @item.CategoryName
+                                </div>
+                                <span class="@(Privacy.IsMasked ? "masked" : "")">@item.Percentage%</span>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (TagExpenseDto item in dashboard.ExpensesByTag.Take(5))
+                        {
+                            <div class="d-flex align-items-center justify-content-between mb-1 small">
+                                <div><i class="bi bi-tag me-1"></i>@item.TagName</div>
+                                <span class="@(Privacy.IsMasked ? "masked" : "")">@item.Percentage%</span>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="widget-card">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0 fw-semibold">Balance Trend (30 days)</h6>
+        </div>
+        <canvas id="trendChart" height="100"></canvas>
+    </div>
+}
+else
+{
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+        No data yet. Add accounts and records to see your dashboard.
+    </div>
+}
+
+@code {
+    DashboardDto? dashboard;
+    List<CategoryDto> categories = [];
+    List<AccountDto> accounts = [];
+    List<StoreDto> stores = [];
+    bool loading = true;
+    bool filtersOpen = false;
+    string pieTab = "category";
+    string loadError = string.Empty;
+
+    static RecordFilterDto DefaultFilter()
+    {
+        DateTime monthStart = new(DateTime.Now.Year, DateTime.Now.Month, 1);
+        return new RecordFilterDto
+        {
+            FromDate = monthStart,
+            ToDate = monthStart.AddMonths(1).AddDays(-1)
+        };
+    }
+
+    RecordFilterDto filter = DefaultFilter();
+
+    HashSet<int> ExpandedCategoryIds => filter.CategoryId.HasValue
+        ? CategoryAndDescendants(filter.CategoryId.Value, categories)
+        : [];
+
+    IEnumerable<RecordDto> FilteredRecords
+    {
+        get
+        {
+            IEnumerable<RecordDto> list = dashboard?.RecentRecords ?? [];
+            if (filter.AccountId.HasValue)
+                list = list.Where(r => r.AccountId == filter.AccountId.Value);
+            if (filter.CategoryId.HasValue)
+            {
+                HashSet<int> ids = ExpandedCategoryIds;
+                list = list.Where(r => ids.Contains(r.CategoryId));
+            }
+            if (filter.StoreId.HasValue)
+                list = list.Where(r => r.StoreId == filter.StoreId.Value);
+            if (filter.Type.HasValue)
+                list = list.Where(r => r.Type == filter.Type.Value);
+            if (!string.IsNullOrWhiteSpace(filter.Search))
+                list = list.Where(r => r.Notes.Contains(filter.Search, StringComparison.OrdinalIgnoreCase));
+            return list;
+        }
+    }
+
+    IEnumerable<CategoryExpenseDto> FilteredExpensesByCategory
+    {
+        get
+        {
+            if (!filter.CategoryId.HasValue) return dashboard?.ExpensesByCategory ?? [];
+            HashSet<int> ids = ExpandedCategoryIds;
+            return (dashboard?.ExpensesByCategory ?? []).Where(e => ids.Contains(e.CategoryId));
+        }
+    }
+
+    static HashSet<int> CategoryAndDescendants(int id, List<CategoryDto> tree)
+    {
+        HashSet<int> result = [id];
+        CategoryDto? cat = FlatAll(tree).FirstOrDefault(c => c.Id == id);
+        if (cat != null)
+            foreach (CategoryDto sub in cat.SubCategories)
+                result.Add(sub.Id);
+        return result;
+    }
+
+    static IEnumerable<CategoryDto> FlatAll(IEnumerable<CategoryDto> cats)
+    {
+        foreach (CategoryDto c in cats)
+        {
+            yield return c;
+            foreach (CategoryDto sub in FlatAll(c.SubCategories))
+                yield return sub;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Privacy.OnChanged += OnPrivacyChanged;
+        var loadCats = Api.GetCategoriesAsync();
+        var loadAccounts = Api.GetAccountsAsync();
+        var loadStores = Api.GetStoresAsync();
+        await LoadData();
+        categories = await loadCats;
+        accounts = await loadAccounts;
+        stores = await loadStores;
+    }
+
+    void OnPrivacyChanged() => InvokeAsync(StateHasChanged);
+
+    async Task ApplyFilter()
+    {
+        await LoadData();
+        await RenderChartsAsync();
+    }
+
+    async Task ResetFilter()
+    {
+        filter = DefaultFilter();
+        await LoadData();
+        await RenderChartsAsync();
+    }
+
+    async Task LoadData()
+    {
+        loading = true;
+        loadError = string.Empty;
+        try
+        {
+            dashboard = await Api.GetDashboardAsync(filter.FromDate, filter.ToDate);
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!loading && dashboard != null)
+            await RenderChartsAsync();
+    }
+
+    async Task RenderChartsAsync()
+    {
+        if (dashboard == null) return;
+
+        List<string> pieLabels = pieTab == "category"
+            ? FilteredExpensesByCategory.Select(e => e.CategoryName).ToList()
+            : dashboard.ExpensesByTag.Select(e => e.TagName).ToList();
+
+        List<decimal> pieData = pieTab == "category"
+            ? FilteredExpensesByCategory.Select(e => e.Amount).ToList()
+            : dashboard.ExpensesByTag.Select(e => e.Amount).ToList();
+
+        List<string> pieColors = pieTab == "category"
+            ? FilteredExpensesByCategory.Select(e => e.CategoryColor).ToList()
+            : dashboard.ExpensesByTag.Select(_ => "#388bfd").ToList();
+
+        await JS.InvokeVoidAsync("renderPieChart", "pieChart", pieLabels, pieData, pieColors);
+
+        List<string> trendLabels = dashboard.BalanceTrend.Select(t => t.Date.ToString("MMM dd")).ToList();
+        List<decimal> trendData = dashboard.BalanceTrend.Select(t => t.Balance).ToList();
+        await JS.InvokeVoidAsync("renderLineChart", "trendChart", trendLabels, trendData);
+    }
+
+    void GoToRecords(RecordDto _) => Nav.NavigateTo("records");
+    public void Dispose() => Privacy.OnChanged -= OnPrivacyChanged;
+
+    static string FormatAmount(decimal amount, string currency) =>
+        $"{currency} {Math.Abs(amount):N2}";
+}

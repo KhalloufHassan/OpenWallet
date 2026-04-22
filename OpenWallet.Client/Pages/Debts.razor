@@ -1,0 +1,464 @@
+@page "/debts"
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.DTOs
+@using OpenWallet.Shared.Models
+@inject ApiClient Api
+
+<PageTitle>Debts - OpenWallet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-semibold">Debts</h4>
+    <button class="btn btn-primary btn-sm" @onclick="() => OpenModal(null)">
+        <i class="bi bi-plus-lg me-1"></i>Add Debt
+    </button>
+</div>
+
+@if (loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (DebtDto debt in debts)
+        {
+            <div class="col-md-6 col-lg-4 @(debt.IsResolved ? "debt-resolved" : "")">
+                <div class="widget-card">
+                    <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div>
+                            <div class="fw-semibold">@debt.PartyName</div>
+                            <span class="badge @(debt.IsLending ? "badge-income" : "badge-expense") small">
+                                @(debt.IsLending ? "I lent" : "I owe")
+                            </span>
+                            @if (debt.IsResolved)
+                            {
+                                <span class="badge bg-secondary ms-1 small">Resolved</span>
+                            }
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenModal(debt)">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(debt)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 small mt-1">
+                        <div class="col-6">
+                            <div class="text-muted">Total</div>
+                            <div class="fw-semibold">@debt.Amount.ToString("N2")</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted">Paid</div>
+                            <div class="fw-semibold amount-positive">@debt.AmountPaid.ToString("N2")</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="text-muted">Remaining</div>
+                            <div class="fw-bold fs-6 @(debt.AmountRemaining > 0 ? "amount-negative" : "amount-positive")">
+                                @debt.AmountRemaining.ToString("N2")
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (debt.Amount > 0)
+                    {
+                        decimal pct = Math.Min(100, debt.AmountPaid / debt.Amount * 100);
+                        <div class="progress mt-2" style="height: 4px;">
+                            <div class="progress-bar bg-success" style="width: @pct%"></div>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(debt.Notes))
+                    {
+                        <div class="text-muted small mt-2">@debt.Notes</div>
+                    }
+
+                    @if (debt.RelatedRecords.Count > 0)
+                    {
+                        <div class="mt-2 pt-2" style="border-top:1px solid #30363d;">
+                            <div class="text-muted small mb-1">
+                                <i class="bi bi-receipt me-1"></i>@debt.RelatedRecords.Count payment(s)
+                            </div>
+                            @foreach (RecordDto r in debt.RelatedRecords.Take(3))
+                            {
+                                <div class="d-flex justify-content-between small text-muted">
+                                    <span>@r.DateTime.ToString("MMM dd") · @r.CategoryName</span>
+                                    <span class="fw-semibold">@Math.Abs(r.Amount).ToString("N2")</span>
+                                </div>
+                            }
+                            @if (debt.RelatedRecords.Count > 3)
+                            {
+                                <div class="small text-muted">+@(debt.RelatedRecords.Count - 3) more</div>
+                            }
+                        </div>
+                    }
+
+                    @if (!debt.IsResolved)
+                    {
+                        <button class="btn btn-sm btn-outline-success mt-2 w-100"
+                                @onclick="() => MarkResolved(debt)">
+                            <i class="bi bi-check-circle me-1"></i>Mark as Resolved
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editingId == null ? "New Debt" : "Edit Debt")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Party Name</label>
+                            <input class="form-control" @bind="form.PartyName" placeholder="e.g. John Doe" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Total Amount</label>
+                            <input type="number" class="form-control" @bind="form.Amount" step="0.01" min="0" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Direction</label>
+                            <div class="d-flex gap-3 pt-1">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="rLent" name="direction"
+                                           checked="@form.IsLending" @onchange="@(() => form.IsLending = true)" />
+                                    <label class="form-check-label" for="rLent">I lent to them</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="rOwe" name="direction"
+                                           checked="@(!form.IsLending)" @onchange="@(() => form.IsLending = false)" />
+                                    <label class="form-check-label" for="rOwe">I owe them</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Notes</label>
+                            <input class="form-control" @bind="form.Notes" />
+                        </div>
+                        @if (editingId != null)
+                        {
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="cbResolved" @bind="formResolved" />
+                                    <label class="form-check-label" for="cbResolved">Mark as resolved</label>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (editingId != null)
+                    {
+                        <div class="mt-4 pt-3" style="border-top:1px solid #30363d;">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="small fw-semibold text-muted">
+                                    <i class="bi bi-receipt me-1"></i>Linked Records
+                                    <span class="ms-1 text-white">
+                                        (paid: @currentLinkedRecords.Sum(r => Math.Abs(r.Amount)).ToString("N2"))
+                                    </span>
+                                </span>
+                            </div>
+
+                            @if (currentLinkedRecords.Count == 0)
+                            {
+                                <p class="small text-muted mb-2">No records linked yet.</p>
+                            }
+                            else
+                            {
+                                @foreach (RecordDto r in currentLinkedRecords)
+                                {
+                                    <div class="d-flex align-items-center justify-content-between py-1" style="border-bottom:1px solid #21262d;">
+                                        <div class="small">
+                                            <span class="badge rounded-pill @BadgeClass(r.Type) me-1">@r.Type</span>
+                                            <span class="text-muted me-1">@r.DateTime.ToString("yyyy-MM-dd")</span>
+                                            <i class="bi @r.CategoryIcon me-1" style="color:@r.CategoryColor"></i>
+                                            @r.CategoryName
+                                            @if (!string.IsNullOrEmpty(r.Notes))
+                                            {
+                                                <span class="text-muted ms-1">· @r.Notes</span>
+                                            }
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-2">
+                                            <span class="small fw-semibold @AmountClass(r)">@Math.Abs(r.Amount).ToString("N2")</span>
+                                            <button class="btn btn-sm btn-outline-danger" title="Unlink"
+                                                    @onclick="() => UnlinkRecord(r)">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            }
+
+                            <div class="mt-3">
+                                <div class="small fw-semibold text-muted mb-2">Link a record</div>
+                                <div class="d-flex gap-2 mb-2">
+                                    <input class="form-control form-control-sm"
+                                           @bind="recordSearch"
+                                           @bind:event="oninput"
+                                           @onkeydown="OnSearchKeyDown"
+                                           placeholder="Search by notes, category…" />
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            @onclick="SearchRecords"
+                                            disabled="@searchingRecords">
+                                        @if (searchingRecords)
+                                        {
+                                            <span class="spinner-border spinner-border-sm"></span>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-search"></i>
+                                        }
+                                    </button>
+                                </div>
+                                @if (recordSearchResults.Count > 0)
+                                {
+                                    <div style="max-height:220px; overflow-y:auto; border:1px solid #30363d; border-radius:6px;">
+                                        @foreach (RecordDto r in recordSearchResults)
+                                        {
+                                            bool alreadyLinked = currentLinkedRecords.Any(lr => lr.Id == r.Id);
+                                            <div class="d-flex align-items-center justify-content-between px-2 py-1"
+                                                 style="border-bottom:1px solid #21262d;">
+                                                <div class="small">
+                                                    <span class="badge rounded-pill @BadgeClass(r.Type) me-1">@r.Type</span>
+                                                    <span class="text-muted me-1">@r.DateTime.ToString("yyyy-MM-dd")</span>
+                                                    <i class="bi @r.CategoryIcon me-1" style="color:@r.CategoryColor"></i>
+                                                    @r.CategoryName
+                                                    @if (!string.IsNullOrEmpty(r.Notes))
+                                                    {
+                                                        <span class="text-muted ms-1">· @r.Notes</span>
+                                                    }
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2 flex-shrink-0 ms-2">
+                                                    <span class="small fw-semibold @AmountClass(r)">@Math.Abs(r.Amount).ToString("N2")</span>
+                                                    @if (alreadyLinked)
+                                                    {
+                                                        <span class="small text-muted">linked</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-success" title="Link"
+                                                                @onclick="() => LinkRecord(r)">
+                                                            <i class="bi bi-plus"></i>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(error))
+                    {
+                        <div class="alert alert-danger py-2 mt-3">@error</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="Save" disabled="@saving">
+                        @if (saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (deleteTarget != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Debt</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => deleteTarget = null"></button>
+                </div>
+                <div class="modal-body">Delete debt with <strong>@deleteTarget.PartyName</strong>?</div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary btn-sm" @onclick="() => deleteTarget = null">Cancel</button>
+                    <button class="btn btn-danger btn-sm" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<DebtDto> debts = [];
+    bool loading = true;
+    bool showModal = false;
+    bool saving = false;
+    string error = string.Empty;
+    int? editingId = null;
+    DebtDto? deleteTarget;
+    bool formResolved = false;
+
+    List<RecordDto> currentLinkedRecords = [];
+    string recordSearch = string.Empty;
+    List<RecordDto> recordSearchResults = [];
+    bool searchingRecords = false;
+
+    CreateDebtDto form = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        debts = await Api.GetDebtsAsync();
+        loading = false;
+    }
+
+    void OpenModal(DebtDto? debt)
+    {
+        error = string.Empty;
+        recordSearch = string.Empty;
+        recordSearchResults = [];
+        if (debt == null)
+        {
+            editingId = null;
+            form = new CreateDebtDto();
+            formResolved = false;
+            currentLinkedRecords = [];
+        }
+        else
+        {
+            editingId = debt.Id;
+            form = new CreateDebtDto
+            {
+                PartyName = debt.PartyName,
+                Amount = debt.Amount,
+                IsLending = debt.IsLending,
+                Notes = debt.Notes
+            };
+            formResolved = debt.IsResolved;
+            currentLinkedRecords = debt.RelatedRecords.ToList();
+        }
+        showModal = true;
+    }
+
+    async Task CloseModal()
+    {
+        showModal = false;
+        debts = await Api.GetDebtsAsync();
+    }
+
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(form.PartyName) || form.Amount <= 0)
+        {
+            error = "Party name and amount are required.";
+            return;
+        }
+        saving = true;
+        try
+        {
+            if (editingId == null)
+            {
+                DebtDto created = await Api.CreateDebtAsync(form);
+                editingId = created.Id;
+                currentLinkedRecords = [];
+                debts = await Api.GetDebtsAsync();
+                showModal = false;
+            }
+            else
+            {
+                await Api.UpdateDebtAsync(editingId.Value, new UpdateDebtDto
+                {
+                    PartyName = form.PartyName,
+                    Amount = form.Amount,
+                    IsLending = form.IsLending,
+                    Notes = form.Notes,
+                    IsResolved = formResolved
+                });
+                debts = await Api.GetDebtsAsync();
+                showModal = false;
+            }
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+
+    async Task MarkResolved(DebtDto debt)
+    {
+        await Api.UpdateDebtAsync(debt.Id, new UpdateDebtDto
+        {
+            PartyName = debt.PartyName,
+            Amount = debt.Amount,
+            IsLending = debt.IsLending,
+            Notes = debt.Notes,
+            IsResolved = true
+        });
+        debts = await Api.GetDebtsAsync();
+    }
+
+    void ConfirmDelete(DebtDto debt) => deleteTarget = debt;
+
+    async Task ExecuteDelete()
+    {
+        if (deleteTarget == null) return;
+        await Api.DeleteDebtAsync(deleteTarget.Id);
+        debts = await Api.GetDebtsAsync();
+        deleteTarget = null;
+    }
+
+    async Task SearchRecords()
+    {
+        searchingRecords = true;
+        try
+        {
+            RecordsPageResult result = await Api.GetRecordsAsync(new RecordFilterDto
+            {
+                Search = recordSearch,
+                Page = 1,
+                PageSize = 20
+            });
+            recordSearchResults = result.Records;
+        }
+        finally { searchingRecords = false; }
+    }
+
+    async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchRecords();
+    }
+
+    async Task LinkRecord(RecordDto r)
+    {
+        if (editingId == null) return;
+        await Api.LinkDebtRecordAsync(editingId.Value, r.Id);
+        currentLinkedRecords.Add(r);
+    }
+
+    async Task UnlinkRecord(RecordDto r)
+    {
+        if (editingId == null) return;
+        await Api.UnlinkDebtRecordAsync(editingId.Value, r.Id);
+        currentLinkedRecords.RemoveAll(lr => lr.Id == r.Id);
+    }
+
+    static string BadgeClass(RecordType type) => type switch
+    {
+        RecordType.Income => "badge-income",
+        RecordType.Expense => "badge-expense",
+        RecordType.Transfer => "badge-transfer",
+        _ => "bg-secondary"
+    };
+
+    static string AmountClass(RecordDto r) => r.Type switch
+    {
+        RecordType.Income => "amount-positive",
+        RecordType.Expense => "amount-negative",
+        _ => "amount-transfer"
+    };
+}

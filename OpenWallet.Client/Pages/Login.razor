@@ -1,0 +1,176 @@
+@page "/login"
+@layout AuthPageLayout
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.DTOs
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="widget-card" style="width:100%;max-width:380px;">
+    <div class="text-center mb-4">
+        <i class="bi bi-wallet2 fs-1 text-primary"></i>
+        <h4 class="mt-2 mb-0 fw-semibold">OpenWallet</h4>
+        <p class="text-muted small mt-1 mb-0">
+            @if (step == LoginStep.TwoFactor)
+            { <span>Enter your verification code</span> }
+            else if (Locked)
+            { <span>Session locked due to inactivity</span> }
+            else
+            { <span>Sign in to continue</span> }
+        </p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div class="alert alert-danger py-2 small">@error</div>
+    }
+
+    @if (step == LoginStep.Password)
+    {
+        <div class="mb-3">
+            <label class="form-label small">Username</label>
+            <input class="form-control" @bind="username" @onkeydown="OnKeyDown" placeholder="Enter username" autocomplete="username" />
+        </div>
+        <div class="mb-4">
+            <label class="form-label small">Password</label>
+            <input type="password" class="form-control" @bind="password" @onkeydown="OnKeyDown" placeholder="Enter password" autocomplete="current-password" />
+        </div>
+        <button class="btn btn-primary w-100 mb-2" @onclick="DoLogin" disabled="@busy">
+            @if (busy) { <span class="spinner-border spinner-border-sm me-2"></span> }
+            @(Locked ? "Unlock" : "Sign In")
+        </button>
+        @if (webAuthnSupported)
+        {
+            <button class="btn btn-outline-secondary w-100" @onclick="DoPasskeyLogin" disabled="@busy">
+                <i class="bi bi-key me-1"></i>@(Locked ? "Unlock with Passkey" : "Use a Passkey")
+            </button>
+        }
+    }
+    else if (step == LoginStep.TwoFactor)
+    {
+        <div class="mb-4">
+            <label class="form-label small">Authenticator Code</label>
+            <input class="form-control text-center letter-spacing-2" @bind="totpCode" @onkeydown="OnKeyDown"
+                   placeholder="000000" maxlength="6" autocomplete="one-time-code" inputmode="numeric" />
+        </div>
+        <button class="btn btn-primary w-100 mb-2" @onclick="DoVerifyTotp" disabled="@busy">
+            @if (busy) { <span class="spinner-border spinner-border-sm me-2"></span> }
+            Verify
+        </button>
+        <button class="btn btn-link w-100 text-muted small" @onclick="BackToPassword">Back</button>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "locked")] public bool Locked { get; set; }
+
+    enum LoginStep { Password, TwoFactor }
+
+    LoginStep step = LoginStep.Password;
+    string username = string.Empty;
+    string password = string.Empty;
+    string totpCode = string.Empty;
+    string error = string.Empty;
+    bool busy;
+    bool webAuthnSupported;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            webAuthnSupported = await JS.InvokeAsync<bool>("owAuth.isWebAuthnSupported");
+            StateHasChanged();
+        }
+    }
+
+    async Task DoLogin()
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return;
+        busy = true;
+        error = string.Empty;
+
+        LoginResultDto result = await Api.LoginAsync(new LoginDto { Username = username, Password = password });
+        busy = false;
+
+        if (result.RequiresTwoFactor)
+        {
+            step = LoginStep.TwoFactor;
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(result.Error))
+        {
+            error = "Invalid username or password.";
+            return;
+        }
+
+        Nav.NavigateTo("/", forceLoad: true);
+    }
+
+    async Task DoVerifyTotp()
+    {
+        if (string.IsNullOrWhiteSpace(totpCode)) return;
+        busy = true;
+        error = string.Empty;
+
+        LoginResultDto result = await Api.VerifyTotpAsync(new VerifyTotpDto { Code = totpCode });
+        busy = false;
+
+        if (!string.IsNullOrEmpty(result.Error))
+        {
+            error = "Invalid code. Please try again.";
+            totpCode = string.Empty;
+            return;
+        }
+
+        Nav.NavigateTo("/", forceLoad: true);
+    }
+
+    async Task DoPasskeyLogin()
+    {
+        busy = true;
+        error = string.Empty;
+        try
+        {
+            string optionsJson = await Api.GetPasskeyLoginOptionsAsync();
+            string assertionJson = await JS.InvokeAsync<string>("owAuth.passkeyAuthenticate", optionsJson);
+            LoginResultDto result = await Api.CompletePasskeyLoginAsync(assertionJson);
+
+            if (!string.IsNullOrEmpty(result.Error) || !result.Succeeded)
+            {
+                error = result.Error ?? "Passkey authentication failed.";
+                return;
+            }
+
+            Nav.NavigateTo("/", forceLoad: true);
+        }
+        catch (JSException jsEx)
+        {
+            error = jsEx.Message.Contains("cancelled") || jsEx.Message.Contains("abort")
+                ? "Passkey sign-in was cancelled."
+                : "Passkey authentication failed.";
+        }
+        catch
+        {
+            error = "Passkey authentication failed.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    void BackToPassword()
+    {
+        step = LoginStep.Password;
+        error = string.Empty;
+        totpCode = string.Empty;
+    }
+
+    async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        if (step == LoginStep.Password) await DoLogin();
+        else await DoVerifyTotp();
+    }
+}

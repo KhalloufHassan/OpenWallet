@@ -1,0 +1,647 @@
+@page "/records"
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.DTOs
+@using OpenWallet.Shared.Models
+@using Microsoft.AspNetCore.Components.Forms
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Records - OpenWallet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+    <h4 class="mb-0 fw-semibold">Records</h4>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" @onclick="() => OpenModal(null, false)">
+            <i class="bi bi-plus-lg me-1"></i>Add Record
+        </button>
+        <button class="btn btn-primary btn-sm" @onclick="() => OpenModal(null, true)">
+            <i class="bi bi-arrow-left-right me-1"></i>Transfer
+        </button>
+    </div>
+</div>
+
+<div class="widget-card mb-3">
+    <button class="btn btn-sm btn-outline-secondary d-md-none w-100 mb-2 text-start"
+            @onclick="() => filtersExpanded = !filtersExpanded">
+        <i class="bi bi-funnel me-1"></i>Filters
+        <i class="bi @(filtersExpanded ? "bi-chevron-up" : "bi-chevron-down") float-end mt-1"></i>
+    </button>
+    <div class="@(filtersExpanded ? "" : "d-none") d-md-block">
+        <RecordFilterPanel Filter="filter"
+                           Accounts="accounts"
+                           Categories="categories"
+                           Stores="stores"
+                           OnSearch="ApplyFilter"
+                           OnReset="ResetFilter" />
+    </div>
+</div>
+
+@if (loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="widget-card">
+        @if (records.Count == 0)
+        {
+            <p class="text-muted small mb-0">No records found for this period.</p>
+        }
+        @foreach (RecordDto r in records)
+        {
+            <RecordRow Record="r" OnClick="OnRecordClick" />
+        }
+        <div class="d-flex align-items-center justify-content-between mt-3">
+            <small class="text-muted">@total records total</small>
+            <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(filter.Page <= 1)"
+                        @onclick="PrevPage"><i class="bi bi-chevron-left"></i></button>
+                <span class="btn btn-sm disabled">Page @filter.Page of @TotalPages</span>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(filter.Page >= TotalPages)"
+                        @onclick="NextPage"><i class="bi bi-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @(isTransfer ? (editingId == null ? "New Transfer" : "Edit Transfer") : (editingId == null ? "New Record" : "Edit Record"))
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (isTransfer)
+                    {
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">From Account</label>
+                                <select class="form-select" @bind="transferDto.FromAccountId">
+                                    <option value="0">Select account...</option>
+                                    @foreach (AccountDto a in accounts)
+                                    {
+                                        <option value="@a.Id">@a.Name (@a.Currency)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">To Account</label>
+                                <select class="form-select" @bind="transferDto.ToAccountId">
+                                    <option value="0">Select account...</option>
+                                    @foreach (AccountDto a in accounts)
+                                    {
+                                        <option value="@a.Id">@a.Name (@a.Currency)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Amount</label>
+                                <input type="number" class="form-control" @bind="transferDto.Amount" step="0.01" min="0" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Category</label>
+                                <CategoryPicker Categories="categories"
+                                               Value="@(transferDto.CategoryId == 0 ? null : transferDto.CategoryId)"
+                                               ValueChanged="id => transferDto.CategoryId = id ?? 0" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Date & Time</label>
+                                <input type="datetime-local" class="form-control" @bind="transferDto.DateTime" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Tags</label>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (TagDto t in allTags)
+                                    {
+                                        bool sel = transferDto.TagIds.Contains(t.Id);
+                                        <span class="tag-badge @(sel ? "border-primary text-white" : "")" style="cursor:pointer"
+                                              @onclick="() => ToggleTag(t.Id, transferDto.TagIds)">@t.Name</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Notes</label>
+                                <input class="form-control" @bind="transferDto.Notes" />
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Type</label>
+                                <select class="form-select" @bind="recordForm.Type">
+                                    <option value="@RecordType.Expense">Expense</option>
+                                    <option value="@RecordType.Income">Income</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Account</label>
+                                <select class="form-select" @bind="recordForm.AccountId">
+                                    <option value="0">Select account...</option>
+                                    @foreach (AccountDto a in accounts)
+                                    {
+                                        <option value="@a.Id">@a.Name (@a.Currency)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Amount</label>
+                                <input type="number" class="form-control" @bind="recordAmount" step="0.01" min="0" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Category</label>
+                                <CategoryPicker Categories="categories"
+                                               Value="@(recordForm.CategoryId == 0 ? null : recordForm.CategoryId)"
+                                               ValueChanged="id => recordForm.CategoryId = id ?? 0" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Store <span class="text-muted small">(optional)</span></label>
+                                <select class="form-select" @bind="recordForm.StoreId">
+                                    <option value="">No store</option>
+                                    @foreach (StoreDto s in stores)
+                                    {
+                                        <option value="@s.Id">@s.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Date & Time</label>
+                                <input type="datetime-local" class="form-control" @bind="recordForm.DateTime" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Tags</label>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (TagDto t in allTags)
+                                    {
+                                        bool sel = recordForm.TagIds.Contains(t.Id);
+                                        <span class="tag-badge @(sel ? "border-primary text-white" : "")"
+                                              style="cursor:pointer"
+                                              @onclick="() => ToggleTag(t.Id, recordForm.TagIds)">@t.Name</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Notes</label>
+                                <input class="form-control" @bind="recordForm.Notes" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Location</label>
+                                @if (recordForm.Latitude.HasValue && recordForm.Longitude.HasValue)
+                                {
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <span class="small text-muted">
+                                            <i class="bi bi-geo-alt-fill text-success me-1"></i>
+                                            @recordForm.Latitude.Value.ToString("F5"), @recordForm.Longitude.Value.ToString("F5")
+                                        </span>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="ClearLocation">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                    </div>
+                                    <div id="record-map" style="height:200px; border-radius:6px; border:1px solid #30363d; z-index:0;"></div>
+                                }
+                                else
+                                {
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                @onclick="CaptureLocation" disabled="@capturingLocation">
+                                            @if (capturingLocation)
+                                            {
+                                                <span class="spinner-border spinner-border-sm me-1"></span>
+                                                <span>Capturing...</span>
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-geo-alt me-1"></i>
+                                                <span>Capture GPS</span>
+                                            }
+                                        </button>
+                                        @if (!string.IsNullOrEmpty(locationError))
+                                        {
+                                            <span class="small text-danger ms-2">@locationError</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    @if (!isTransfer)
+                    {
+                        <div class="mt-3 pt-3" style="border-top:1px solid #30363d;">
+                            <div class="small fw-semibold text-muted mb-2"><i class="bi bi-paperclip me-1"></i>Attachments</div>
+
+                            @foreach (AttachmentDto att in currentAttachments)
+                            {
+                                <div class="mb-2">
+                                    @if (att.ContentType.StartsWith("image/"))
+                                    {
+                                        <img src="api/records/@editingId/attachments/@att.Id"
+                                             alt="@att.FileName"
+                                             style="max-width:100%; max-height:200px; border-radius:6px; display:block; margin-bottom:4px;" />
+                                    }
+                                    <div class="d-flex align-items-center justify-content-between py-1">
+                                        <div class="small text-truncate me-2" style="max-width:260px;">
+                                            <i class="bi @(att.ContentType.StartsWith("image/") ? "bi-image" : "bi-file-earmark") me-1 text-muted"></i>
+                                            @att.FileName
+                                            <span class="text-muted ms-1">(@FormatFileSize(att.FileSize))</span>
+                                        </div>
+                                        <div class="d-flex gap-1 flex-shrink-0">
+                                            <a href="api/records/@editingId/attachments/@att.Id"
+                                               download="@att.FileName"
+                                               class="btn btn-sm btn-outline-secondary"
+                                               title="Download">
+                                                <i class="bi bi-download"></i>
+                                            </a>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @onclick="() => DeleteAttachment(att)"
+                                                    title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            @foreach (IBrowserFile f in pendingUploads)
+                            {
+                                <div class="d-flex align-items-center justify-content-between py-1" style="border-bottom:1px solid #21262d; opacity:0.75;">
+                                    <div class="small text-truncate me-2" style="max-width:260px;">
+                                        <i class="bi bi-clock me-1 text-muted"></i>
+                                        @f.Name
+                                        <span class="text-muted ms-1">(@FormatFileSize(f.Size))</span>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => pendingUploads.Remove(f)" title="Remove">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                            }
+
+                            <div class="mt-2">
+                                <InputFile OnChange="OnFilesSelected" multiple
+                                           accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                                           class="form-control form-control-sm" />
+                            </div>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(error))
+                    {
+                        <div class="alert alert-danger py-2 mt-3">@error</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    @if (editingId != null)
+                    {
+                        <button class="btn btn-outline-danger me-auto" @onclick="DeleteFromModal">
+                            <i class="bi bi-trash me-1"></i>Delete
+                        </button>
+                    }
+                    <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="Save" disabled="@saving">
+                        @if (saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (deleteTarget != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Record</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => deleteTarget = null"></button>
+                </div>
+                <div class="modal-body">
+                    Delete this @deleteTarget.Type record?
+                    @if (deleteTarget.Type == RecordType.Transfer)
+                    {
+                        <div class="text-warning mt-1 small"><i class="bi bi-exclamation-triangle me-1"></i>Both sides of the transfer will be deleted.</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => deleteTarget = null">Cancel</button>
+                    <button class="btn btn-danger" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "useTemplate")]
+    public int? UseTemplateId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "add")]
+    public bool AddNew { get; set; }
+
+    List<RecordDto> records = [];
+    List<AccountDto> accounts = [];
+    List<CategoryDto> categories = [];
+    List<TagDto> allTags = [];
+    List<StoreDto> stores = [];
+    int total = 0;
+    bool loading = true;
+    bool showModal = false;
+    bool isTransfer = false;
+    bool saving = false;
+    bool capturingLocation = false;
+    bool mapNeedsRender = false;
+    string error = string.Empty;
+    string locationError = string.Empty;
+    int? editingId = null;
+    RecordDto? deleteTarget;
+    List<AttachmentDto> currentAttachments = [];
+    List<AttachmentDto> pendingDeletions = [];
+    List<IBrowserFile> pendingUploads = [];
+
+    bool filtersExpanded = false;
+    RecordFilterDto filter = new()
+    {
+        Page = 1,
+        PageSize = 50,
+        FromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1),
+        ToDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1).AddMonths(1).AddDays(-1)
+    };
+    CreateRecordDto recordForm = new() { DateTime = DateTime.Now, Type = RecordType.Expense };
+    decimal recordAmount = 0;
+    CreateTransferDto transferDto = new() { DateTime = DateTime.Now };
+
+    int TotalPages => (int)Math.Ceiling((double)total / filter.PageSize);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (mapNeedsRender && recordForm.Latitude.HasValue && recordForm.Longitude.HasValue)
+        {
+            mapNeedsRender = false;
+            try
+            {
+                await JS.InvokeVoidAsync("renderMap", "record-map",
+                    recordForm.Latitude.Value, recordForm.Longitude.Value);
+            }
+            catch { }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadRecords(), LoadSupport());
+        loading = false;
+
+        if (AddNew)
+        {
+            OpenModal(null, false);
+            Nav.NavigateTo("/records", replace: true);
+        }
+        else if (UseTemplateId.HasValue)
+        {
+            TemplateDto? template = await Api.GetTemplateAsync(UseTemplateId.Value);
+            if (template != null)
+            {
+                editingId = null;
+                isTransfer = false;
+                recordAmount = Math.Abs(template.Amount);
+                recordForm = new CreateRecordDto
+                {
+                    AccountId = template.AccountId,
+                    CategoryId = template.CategoryId,
+                    Type = template.Type,
+                    Amount = Math.Abs(template.Amount),
+                    DateTime = DateTime.Now,
+                    Notes = template.Notes,
+                    TagIds = template.Tags.Select(t => t.Id).ToList()
+                };
+                error = string.Empty;
+                showModal = true;
+                Nav.NavigateTo("/records", replace: true);
+            }
+        }
+    }
+
+    async Task LoadRecords()
+    {
+        RecordsPageResult result = await Api.GetRecordsAsync(filter);
+        records = result.Records;
+        total = result.Total;
+    }
+
+    async Task LoadSupport()
+    {
+        var a = Api.GetAccountsAsync();
+        var c = Api.GetCategoriesAsync();
+        var t = Api.GetTagsAsync();
+        var s = Api.GetStoresAsync();
+        accounts = await a;
+        categories = await c;
+        allTags = await t;
+        stores = await s;
+    }
+
+    async Task ApplyFilter()
+    {
+        filter.Page = 1;
+        loading = true;
+        await LoadRecords();
+        loading = false;
+    }
+
+    async Task ResetFilter()
+    {
+        DateTime monthStart = new(DateTime.Now.Year, DateTime.Now.Month, 1);
+        filter = new RecordFilterDto
+        {
+            Page = 1,
+            PageSize = 50,
+            FromDate = monthStart,
+            ToDate = monthStart.AddMonths(1).AddDays(-1)
+        };
+        await ApplyFilter();
+    }
+
+    async Task PrevPage() { filter.Page--; await ApplyFilter(); }
+    async Task NextPage() { filter.Page++; await ApplyFilter(); }
+
+    void OpenModal(RecordDto? record, bool transfer)
+    {
+        error = string.Empty;
+        locationError = string.Empty;
+        isTransfer = transfer;
+        pendingUploads = [];
+        pendingDeletions = [];
+        if (record == null)
+        {
+            editingId = null;
+            currentAttachments = [];
+            recordForm = new CreateRecordDto { DateTime = DateTime.Now, Type = RecordType.Expense };
+            recordAmount = 0;
+            transferDto = new CreateTransferDto { DateTime = DateTime.Now };
+        }
+        else
+        {
+            editingId = record.Id;
+            currentAttachments = record.Attachments.ToList();
+            recordAmount = Math.Abs(record.Amount);
+            recordForm = new CreateRecordDto
+            {
+                AccountId = record.AccountId,
+                CategoryId = record.CategoryId,
+                StoreId = record.StoreId,
+                Type = record.Type,
+                Amount = Math.Abs(record.Amount),
+                DateTime = record.DateTime,
+                Notes = record.Notes,
+                Latitude = record.Latitude,
+                Longitude = record.Longitude,
+                TagIds = record.Tags.Select(t => t.Id).ToList()
+            };
+            if (record.Latitude.HasValue) mapNeedsRender = true;
+        }
+        showModal = true;
+    }
+
+    async Task CloseModal()
+    {
+        await JS.InvokeVoidAsync("destroyMap", "record-map");
+        showModal = false;
+        mapNeedsRender = false;
+        locationError = string.Empty;
+        pendingUploads = [];
+        pendingDeletions = [];
+    }
+
+    async Task Save()
+    {
+        saving = true;
+        error = string.Empty;
+        try
+        {
+            if (isTransfer)
+            {
+                if (transferDto.FromAccountId == 0 || transferDto.ToAccountId == 0 || transferDto.CategoryId == 0)
+                {
+                    error = "Please fill all required fields.";
+                    return;
+                }
+                await Api.CreateTransferAsync(transferDto);
+            }
+            else
+            {
+                recordForm.Amount = recordAmount;
+                if (recordForm.AccountId == 0 || recordForm.CategoryId == 0)
+                {
+                    error = "Please fill all required fields.";
+                    return;
+                }
+                int targetId;
+                if (editingId == null)
+                {
+                    RecordDto created = await Api.CreateRecordAsync(recordForm);
+                    targetId = created.Id;
+                }
+                else
+                {
+                    await Api.UpdateRecordAsync(editingId.Value, new UpdateRecordDto
+                    {
+                        AccountId = recordForm.AccountId,
+                        CategoryId = recordForm.CategoryId,
+                        StoreId = recordForm.StoreId,
+                        Type = recordForm.Type,
+                        Amount = recordAmount,
+                        DateTime = recordForm.DateTime,
+                        Notes = recordForm.Notes,
+                        Latitude = recordForm.Latitude,
+                        Longitude = recordForm.Longitude,
+                        TagIds = recordForm.TagIds
+                    });
+                    targetId = editingId.Value;
+                }
+                foreach (IBrowserFile file in pendingUploads)
+                    await Api.UploadAttachmentAsync(targetId, file);
+                foreach (AttachmentDto att in pendingDeletions)
+                    await Api.DeleteAttachmentAsync(targetId, att.Id);
+            }
+            await LoadRecords();
+            await CloseModal();
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+
+    void OnRecordClick(RecordDto r) => OpenModal(r, r.Type == RecordType.Transfer);
+
+    async Task DeleteFromModal()
+    {
+        if (editingId == null) return;
+        deleteTarget = records.FirstOrDefault(r => r.Id == editingId);
+        await CloseModal();
+    }
+
+    void ConfirmDelete(RecordDto r) => deleteTarget = r;
+
+    async Task ExecuteDelete()
+    {
+        if (deleteTarget == null) return;
+        await Api.DeleteRecordAsync(deleteTarget.Id);
+        deleteTarget = null;
+        await LoadRecords();
+    }
+
+    static void ToggleTag(int tagId, List<int> tagIds)
+    {
+        if (tagIds.Contains(tagId)) tagIds.Remove(tagId);
+        else tagIds.Add(tagId);
+    }
+
+    void OnFilesSelected(InputFileChangeEventArgs e) =>
+        pendingUploads.AddRange(e.GetMultipleFiles(20));
+
+    void DeleteAttachment(AttachmentDto att)
+    {
+        currentAttachments.Remove(att);
+        if (att.Id > 0) pendingDeletions.Add(att);
+    }
+
+    async Task CaptureLocation()
+    {
+        capturingLocation = true;
+        locationError = string.Empty;
+        try
+        {
+            GeoCoords coords = await JS.InvokeAsync<GeoCoords>("getCurrentPosition");
+            recordForm.Latitude = coords.Latitude;
+            recordForm.Longitude = coords.Longitude;
+        }
+        catch (Exception ex) { locationError = ex.Message; }
+        finally
+        {
+            capturingLocation = false;
+            if (recordForm.Latitude.HasValue) mapNeedsRender = true;
+        }
+    }
+
+    async Task ClearLocation()
+    {
+        await JS.InvokeVoidAsync("destroyMap", "record-map");
+        recordForm.Latitude = null;
+        recordForm.Longitude = null;
+        locationError = string.Empty;
+        mapNeedsRender = false;
+    }
+
+    static string FormatFileSize(long bytes) =>
+        bytes < 1024 ? $"{bytes} B" :
+        bytes < 1024 * 1024 ? $"{bytes / 1024.0:F1} KB" :
+        $"{bytes / (1024.0 * 1024):F1} MB";
+
+    record GeoCoords(double Latitude, double Longitude);
+}

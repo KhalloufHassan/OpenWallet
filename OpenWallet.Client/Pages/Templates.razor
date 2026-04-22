@@ -1,0 +1,284 @@
+@page "/templates"
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.DTOs
+@using OpenWallet.Shared.Models
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>Templates - OpenWallet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-semibold">Templates</h4>
+    <button class="btn btn-primary btn-sm" @onclick="() => OpenModal(null)">
+        <i class="bi bi-plus-lg me-1"></i>Add Template
+    </button>
+</div>
+
+@if (loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (templates.Count == 0)
+{
+    <p class="text-muted">No templates yet.</p>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (TemplateDto t in templates)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="widget-card">
+                    <div class="d-flex align-items-start justify-content-between">
+                        <div>
+                            <div class="fw-semibold">@t.Name</div>
+                            <div class="small text-muted mt-1">
+                                <span class="badge rounded-pill @BadgeClass(t.Type) me-1">@t.Type</span>
+                                <i class="bi @t.CategoryIcon me-1"></i>@t.CategoryName
+                            </div>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-primary" title="Use template" @onclick="() => UseTemplate(t)">
+                                <i class="bi bi-play"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenModal(t)">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(t)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-2 d-flex align-items-center gap-3">
+                        <span class="text-muted small">@t.AccountName</span>
+                        <span class="fw-semibold @(t.Type == RecordType.Expense ? "amount-negative" : "amount-positive")">
+                            @t.Amount.ToString("N2")
+                        </span>
+                    </div>
+                    @if (t.Tags.Count > 0)
+                    {
+                        <div class="mt-2 d-flex flex-wrap gap-1">
+                            @foreach (TagDto tag in t.Tags)
+                            {
+                                <span class="tag-badge">@tag.Name</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editingId == null ? "New Template" : "Edit Template")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Template Name</label>
+                            <input class="form-control" @bind="form.Name" placeholder="e.g. Monthly Gym" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Type</label>
+                            <select class="form-select" @bind="form.Type">
+                                <option value="@RecordType.Expense">Expense</option>
+                                <option value="@RecordType.Income">Income</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Account</label>
+                            <select class="form-select" @bind="form.AccountId">
+                                <option value="0">Select account...</option>
+                                @foreach (AccountDto a in accounts)
+                                {
+                                    <option value="@a.Id">@a.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Amount</label>
+                            <input type="number" class="form-control" @bind="form.Amount" step="0.01" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Category</label>
+                            <select class="form-select" @bind="form.CategoryId">
+                                <option value="0">Select category...</option>
+                                @foreach (CategoryDto c in flatCategories)
+                                {
+                                    <option value="@c.Id">@(c.ParentCategoryId.HasValue ? $"↳ {c.Name}" : c.Name)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Notes</label>
+                            <input class="form-control" @bind="form.Notes" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Tags</label>
+                            <div class="d-flex flex-wrap gap-1">
+                                @foreach (TagDto t in allTags)
+                                {
+                                    bool sel = form.TagIds.Contains(t.Id);
+                                    <span class="tag-badge @(sel ? "border-primary text-white" : "")" style="cursor:pointer"
+                                          @onclick="() => ToggleTag(t.Id)">@t.Name</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(error))
+                    {
+                        <div class="alert alert-danger py-2 mt-3">@error</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="Save" disabled="@saving">
+                        @if (saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (deleteTarget != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Template</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => deleteTarget = null"></button>
+                </div>
+                <div class="modal-body">Delete <strong>@deleteTarget.Name</strong>?</div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary btn-sm" @onclick="() => deleteTarget = null">Cancel</button>
+                    <button class="btn btn-danger btn-sm" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<TemplateDto> templates = [];
+    List<AccountDto> accounts = [];
+    List<CategoryDto> flatCategories = [];
+    List<TagDto> allTags = [];
+    bool loading = true;
+    bool showModal = false;
+    bool saving = false;
+    string error = string.Empty;
+    int? editingId = null;
+    TemplateDto? deleteTarget;
+    CreateTemplateDto form = new() { Type = RecordType.Expense };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadTemplates(), LoadSupport());
+        loading = false;
+    }
+
+    async Task LoadTemplates() => templates = await Api.GetTemplatesAsync();
+
+    async Task LoadSupport()
+    {
+        accounts = await Api.GetAccountsAsync();
+        flatCategories = await Api.GetCategoriesFlatAsync();
+        allTags = await Api.GetTagsAsync();
+    }
+
+    void UseTemplate(TemplateDto t)
+    {
+        Nav.NavigateTo($"/records?useTemplate={t.Id}");
+    }
+
+    void OpenModal(TemplateDto? template)
+    {
+        error = string.Empty;
+        if (template == null)
+        {
+            editingId = null;
+            form = new CreateTemplateDto { Type = RecordType.Expense };
+        }
+        else
+        {
+            editingId = template.Id;
+            form = new CreateTemplateDto
+            {
+                Name = template.Name,
+                AccountId = template.AccountId,
+                CategoryId = template.CategoryId,
+                Type = template.Type,
+                Amount = template.Amount,
+                Notes = template.Notes,
+                TagIds = template.Tags.Select(t => t.Id).ToList()
+            };
+        }
+        showModal = true;
+    }
+
+    void CloseModal() => showModal = false;
+
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name) || form.AccountId == 0 || form.CategoryId == 0)
+        {
+            error = "Name, account and category are required.";
+            return;
+        }
+        saving = true;
+        try
+        {
+            if (editingId == null)
+                await Api.CreateTemplateAsync(form);
+            else
+                await Api.UpdateTemplateAsync(editingId.Value, new UpdateTemplateDto
+                {
+                    Name = form.Name,
+                    AccountId = form.AccountId,
+                    CategoryId = form.CategoryId,
+                    Type = form.Type,
+                    Amount = form.Amount,
+                    Notes = form.Notes,
+                    TagIds = form.TagIds
+                });
+
+            await LoadTemplates();
+            showModal = false;
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+
+    void ToggleTag(int tagId)
+    {
+        if (form.TagIds.Contains(tagId)) form.TagIds.Remove(tagId);
+        else form.TagIds.Add(tagId);
+    }
+
+    void ConfirmDelete(TemplateDto t) => deleteTarget = t;
+
+    async Task ExecuteDelete()
+    {
+        if (deleteTarget == null) return;
+        await Api.DeleteTemplateAsync(deleteTarget.Id);
+        await LoadTemplates();
+        deleteTarget = null;
+    }
+
+    static string BadgeClass(RecordType type) => type switch
+    {
+        RecordType.Income => "badge-income",
+        RecordType.Expense => "badge-expense",
+        _ => "bg-secondary"
+    };
+}

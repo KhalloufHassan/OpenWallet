@@ -1,0 +1,143 @@
+@page "/stores"
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.DTOs
+@inject ApiClient Api
+
+<PageTitle>Stores - OpenWallet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-semibold">Stores</h4>
+    <button class="btn btn-primary btn-sm" @onclick="() => OpenModal(null)">
+        <i class="bi bi-plus-lg me-1"></i>Add Store
+    </button>
+</div>
+
+@if (loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else if (stores.Count == 0)
+{
+    <p class="text-muted">No stores yet. Create one to start tracking spending by location.</p>
+}
+else
+{
+    <div class="d-flex flex-wrap gap-2">
+        @foreach (StoreDto store in stores)
+        {
+            <div class="tag-badge d-flex align-items-center gap-2 px-3 py-2">
+                <i class="bi bi-shop"></i>
+                <span>@store.Name</span>
+                <button class="btn p-0 ms-1" style="line-height:1" @onclick="() => OpenModal(store)">
+                    <i class="bi bi-pencil" style="font-size:.7rem; color:#8b949e"></i>
+                </button>
+                <button class="btn p-0" style="line-height:1" @onclick="() => ConfirmDelete(store)">
+                    <i class="bi bi-x" style="font-size:.9rem; color:#f85149"></i>
+                </button>
+            </div>
+        }
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editingId == null ? "Add Store" : "Edit Store")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" @bind="name" placeholder="e.g. Carrefour" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(error))
+                    {
+                        <div class="alert alert-danger py-2">@error</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary btn-sm" @onclick="CloseModal">Cancel</button>
+                    <button class="btn btn-primary btn-sm" @onclick="Save" disabled="@saving">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (deleteTarget != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Store</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => deleteTarget = null"></button>
+                </div>
+                <div class="modal-body">Delete store <strong>@deleteTarget.Name</strong>?</div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary btn-sm" @onclick="() => deleteTarget = null">Cancel</button>
+                    <button class="btn btn-danger btn-sm" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<StoreDto> stores = [];
+    bool loading = true;
+    bool showModal = false;
+    bool saving = false;
+    string error = string.Empty;
+    int? editingId = null;
+    string name = string.Empty;
+    StoreDto? deleteTarget;
+
+    protected override async Task OnInitializedAsync()
+    {
+        stores = await Api.GetStoresAsync();
+        loading = false;
+    }
+
+    void OpenModal(StoreDto? store)
+    {
+        error = string.Empty;
+        editingId = store?.Id;
+        name = store?.Name ?? string.Empty;
+        showModal = true;
+    }
+
+    void CloseModal() => showModal = false;
+
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(name)) { error = "Name is required."; return; }
+        saving = true;
+        try
+        {
+            CreateStoreDto dto = new() { Name = name };
+            if (editingId == null)
+                await Api.CreateStoreAsync(dto);
+            else
+                await Api.UpdateStoreAsync(editingId.Value, dto);
+
+            stores = await Api.GetStoresAsync();
+            showModal = false;
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+
+    void ConfirmDelete(StoreDto store) => deleteTarget = store;
+
+    async Task ExecuteDelete()
+    {
+        if (deleteTarget == null) return;
+        await Api.DeleteStoreAsync(deleteTarget.Id);
+        stores = await Api.GetStoresAsync();
+        deleteTarget = null;
+    }
+}

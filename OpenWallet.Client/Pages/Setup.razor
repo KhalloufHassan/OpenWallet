@@ -1,0 +1,102 @@
+@page "/setup"
+@layout AuthPageLayout
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.Constants
+@using OpenWallet.Shared.DTOs
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<div class="widget-card" style="width:100%;max-width:480px;">
+    <div class="text-center mb-4">
+        <i class="bi bi-wallet2 fs-1 text-primary"></i>
+        <h4 class="mt-2 mb-0 fw-semibold">Welcome to OpenWallet</h4>
+        <p class="text-muted small mt-1 mb-0">Create your account to get started</p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div class="alert alert-danger py-2 small">@error</div>
+    }
+
+    <h6 class="fw-semibold mb-3 text-muted small text-uppercase letter-spacing">Login credentials</h6>
+
+    <div class="mb-3">
+        <label class="form-label small">Username</label>
+        <input class="form-control" @bind="dto.Username" placeholder="Choose a username" autocomplete="username" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label small">Password</label>
+        <input type="password" class="form-control" @bind="dto.Password" placeholder="Choose a password" autocomplete="new-password" />
+    </div>
+    <div class="mb-4">
+        <label class="form-label small">Confirm password</label>
+        <input type="password" class="form-control" @bind="confirmPassword" placeholder="Repeat password" autocomplete="new-password" />
+    </div>
+
+    <h6 class="fw-semibold mb-3 text-muted small text-uppercase">First account</h6>
+
+    <div class="mb-3">
+        <label class="form-label small">Account name</label>
+        <input class="form-control" @bind="dto.AccountName" placeholder="e.g. Checking, Cash, Wallet" />
+    </div>
+    <div class="row g-3 mb-3">
+        <div class="col-7">
+            <label class="form-label small">Currency</label>
+            <select class="form-select" @bind="dto.AccountCurrency">
+                @foreach (string c in Currencies.All)
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+        </div>
+        <div class="col-5">
+            <label class="form-label small">Color</label>
+            <input type="color" class="form-control form-control-color w-100" @bind="dto.AccountColor" />
+        </div>
+    </div>
+    <div class="mb-4">
+        <label class="form-label small">Initial balance</label>
+        <input type="number" step="0.01" class="form-control" @bind="dto.InitialBalance" placeholder="0.00" />
+    </div>
+
+    <button class="btn btn-primary w-100" @onclick="DoSetup" disabled="@busy">
+        @if (busy)
+        {
+            <span class="spinner-border spinner-border-sm me-2"></span>
+        }
+        Create Account &amp; Sign In
+    </button>
+</div>
+
+@code {
+    SetupDto dto = new() { AccountColor = "#388bfd", AccountCurrency = "USD" };
+    string confirmPassword = string.Empty;
+    string error = string.Empty;
+    bool busy;
+
+    async Task DoSetup()
+    {
+        error = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(dto.Username))
+        { error = "Username is required."; return; }
+
+        if (dto.Password.Length < 6)
+        { error = "Password must be at least 6 characters."; return; }
+
+        if (dto.Password != confirmPassword)
+        { error = "Passwords do not match."; return; }
+
+        if (string.IsNullOrWhiteSpace(dto.AccountName))
+        { error = "Account name is required."; return; }
+
+        busy = true;
+        bool ok = await Api.CompleteSetupAsync(dto);
+        busy = false;
+
+        if (ok)
+            Nav.NavigateTo("/", forceLoad: true);
+        else
+            error = "Setup failed. It may have already been completed.";
+    }
+}

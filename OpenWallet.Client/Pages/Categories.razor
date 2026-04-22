@@ -1,0 +1,216 @@
+@page "/categories"
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.DTOs
+@inject ApiClient Api
+
+<PageTitle>Categories - OpenWallet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-semibold">Categories</h4>
+    <button class="btn btn-primary btn-sm" @onclick="() => OpenModal(null, null)">
+        <i class="bi bi-plus-lg me-1"></i>Add Category
+    </button>
+</div>
+
+@if (loading)
+{
+    <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (CategoryDto cat in categories)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="widget-card">
+                    <div class="d-flex align-items-start justify-content-between mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi @cat.Icon" style="color: @cat.Color; font-size: 1.2rem;"></i>
+                            <span class="fw-semibold">@cat.Name</span>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-secondary" title="Add sub-category"
+                                    @onclick="() => OpenModal(null, cat.Id)">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenModal(cat, null)">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(cat)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    @if (cat.SubCategories.Count > 0)
+                    {
+                        <div class="mt-2 d-flex flex-wrap gap-1">
+                            @foreach (CategoryDto sub in cat.SubCategories)
+                            {
+                                <span class="badge tag-badge" style="border-color: @sub.Color">
+                                    <i class="bi @sub.Icon me-1" style="color: @sub.Color"></i>@sub.Name
+                                    <button class="btn btn-sm p-0 ms-1" style="line-height:1"
+                                            @onclick="() => OpenModal(sub, null)">
+                                        <i class="bi bi-pencil" style="font-size:.65rem; color:#8b949e"></i>
+                                    </button>
+                                </span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (showModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editingId == null ? "Add Category" : "Edit Category")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" @bind="form.Name" placeholder="e.g. Food & Dining" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Icon (Bootstrap Icon class)</label>
+                        <input class="form-control" @bind="form.Icon" placeholder="bi-tag" />
+                        <div class="mt-1">
+                            <i class="bi @form.Icon" style="font-size:1.5rem; color: @form.Color"></i>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Color</label>
+                        <input type="color" class="form-control form-control-color" @bind="form.Color" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Parent Category (optional)</label>
+                        <select class="form-select" @bind="form.ParentCategoryId">
+                            <option value="">None (top-level)</option>
+                            @foreach (CategoryDto cat in categories)
+                            {
+                                if (cat.Id != editingId)
+                                {
+                                    <option value="@cat.Id">@cat.Name</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @if (!string.IsNullOrEmpty(error))
+                    {
+                        <div class="alert alert-danger py-2">@error</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="Save" disabled="@saving">
+                        @if (saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (deleteTarget != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Category</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => deleteTarget = null"></button>
+                </div>
+                <div class="modal-body">Delete <strong>@deleteTarget.Name</strong>?</div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => deleteTarget = null">Cancel</button>
+                    <button class="btn btn-danger" @onclick="ExecuteDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    List<CategoryDto> categories = [];
+    bool loading = true;
+    bool showModal = false;
+    bool saving = false;
+    string error = string.Empty;
+    int? editingId = null;
+    CategoryDto? deleteTarget;
+    CreateCategoryDto form = new() { Color = "#388bfd", Icon = "bi-tag" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        categories = await Api.GetCategoriesAsync();
+        loading = false;
+    }
+
+    void OpenModal(CategoryDto? category, int? parentId)
+    {
+        error = string.Empty;
+        if (category == null)
+        {
+            editingId = null;
+            form = new CreateCategoryDto { Color = "#388bfd", Icon = "bi-tag", ParentCategoryId = parentId };
+        }
+        else
+        {
+            editingId = category.Id;
+            form = new CreateCategoryDto
+            {
+                Name = category.Name,
+                Icon = category.Icon,
+                Color = category.Color,
+                ParentCategoryId = category.ParentCategoryId
+            };
+        }
+        showModal = true;
+    }
+
+    void CloseModal() => showModal = false;
+
+    async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name))
+        {
+            error = "Name is required.";
+            return;
+        }
+        saving = true;
+        try
+        {
+            if (editingId == null)
+                await Api.CreateCategoryAsync(form);
+            else
+                await Api.UpdateCategoryAsync(editingId.Value, new UpdateCategoryDto
+                {
+                    Name = form.Name,
+                    Icon = form.Icon,
+                    Color = form.Color,
+                    ParentCategoryId = form.ParentCategoryId
+                });
+
+            categories = await Api.GetCategoriesAsync();
+            showModal = false;
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { saving = false; }
+    }
+
+    void ConfirmDelete(CategoryDto cat) => deleteTarget = cat;
+
+    async Task ExecuteDelete()
+    {
+        if (deleteTarget == null) return;
+        await Api.DeleteCategoryAsync(deleteTarget.Id);
+        categories = await Api.GetCategoriesAsync();
+        deleteTarget = null;
+    }
+}
