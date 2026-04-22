@@ -9,8 +9,13 @@ public class AttachmentsManager(AppDbContext db, IWebHostEnvironment env)
 {
     private string UploadsPath => Path.Combine(env.ContentRootPath, "uploads");
 
+    private const long MaxFileSizeBytes = 50 * 1024 * 1024;
+
     public async Task<AttachmentDto> SaveAsync(int recordId, IFormFile file)
     {
+        if (file.Length > MaxFileSizeBytes)
+            throw new InvalidOperationException($"File exceeds the maximum allowed size of {MaxFileSizeBytes / 1024 / 1024} MB.");
+
         Directory.CreateDirectory(UploadsPath);
 
         string uniqueName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";

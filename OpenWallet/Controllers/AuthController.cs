@@ -29,7 +29,10 @@ public class AuthController(
             return Ok(new LoginResultDto { Error = "Invalid credentials" });
 
         Microsoft.AspNetCore.Identity.SignInResult result =
-            await signInManager.PasswordSignInAsync(user, dto.Password, isPersistent: true, lockoutOnFailure: false);
+            await signInManager.PasswordSignInAsync(user, dto.Password, isPersistent: true, lockoutOnFailure: true);
+
+        if (result.IsLockedOut)
+            return Ok(new LoginResultDto { Error = "Account is locked. Try again later." });
 
         if (result.RequiresTwoFactor)
             return Ok(new LoginResultDto { RequiresTwoFactor = true, Username = user.UserName! });

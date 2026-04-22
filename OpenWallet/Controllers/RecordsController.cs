@@ -62,8 +62,8 @@ public class RecordsController(RecordsManager manager, AttachmentsManager attach
     [HttpPost("{id:int}/attachments")]
     public async Task<ActionResult<AttachmentDto>> UploadAttachment(int id, IFormFile file)
     {
-        AttachmentDto dto = await attachmentsManager.SaveAsync(id, file);
-        return Ok(dto);
+        try { return Ok(await attachmentsManager.SaveAsync(id, file)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
     }
 
     /// <summary>Downloads a file attachment.</summary>
