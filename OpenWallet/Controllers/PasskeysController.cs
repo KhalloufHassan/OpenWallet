@@ -50,6 +50,7 @@ public class PasskeysController(
             ExcludeCredentials = existingKeys,
             AuthenticatorSelection = new AuthenticatorSelection
             {
+                AuthenticatorAttachment = dto.Platform ? AuthenticatorAttachment.Platform : AuthenticatorAttachment.CrossPlatform,
                 ResidentKey = ResidentKeyRequirement.Preferred,
                 UserVerification = UserVerificationRequirement.Preferred
             },

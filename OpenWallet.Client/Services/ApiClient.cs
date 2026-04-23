@@ -11,10 +11,19 @@ public class ApiClient(HttpClient http)
     public async Task<SetupStatusDto> GetSetupStatusAsync() =>
         await http.GetFromJsonAsync<SetupStatusDto>("api/setup/status") ?? new();
 
-    public async Task<bool> CompleteSetupAsync(SetupDto dto)
+    public async Task<string?> CompleteSetupAsync(SetupDto dto)
     {
         HttpResponseMessage r = await http.PostAsJsonAsync("api/setup", dto);
-        return r.IsSuccessStatusCode;
+        if (r.IsSuccessStatusCode) return null;
+        string body = await r.Content.ReadAsStringAsync();
+        try
+        {
+            System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out System.Text.Json.JsonElement el))
+                return el.GetString() ?? "Setup failed.";
+        }
+        catch { }
+        return "Setup failed. It may have already been completed.";
     }
 
     public async Task<AuthMeDto?> GetMeAsync()

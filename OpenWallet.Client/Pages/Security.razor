@@ -74,11 +74,19 @@ else
                         <i class="bi bi-key text-primary"></i>
                         <h6 class="mb-0 fw-semibold">Passkeys &amp; Security Keys</h6>
                     </div>
-                    @if (webAuthnSupported)
+                    @if (webAuthnSupported && !addingPasskey)
                     {
-                        <button class="btn btn-sm btn-outline-primary" @onclick="ShowAddPasskey" disabled="@busy">
-                            <i class="bi bi-plus-lg me-1"></i>Add
-                        </button>
+                        <div class="d-flex gap-2">
+                            @if (passkeyPlatformSupported)
+                            {
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => ShowAddPasskey(platform: true)" disabled="@busy">
+                                    <i class="bi bi-person-badge me-1"></i>Face/Touch ID
+                                </button>
+                            }
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => ShowAddPasskey(platform: false)" disabled="@busy">
+                                <i class="bi bi-usb-symbol me-1"></i>Security Key
+                            </button>
+                        </div>
                     }
                 </div>
 
@@ -154,7 +162,9 @@ else
     bool loading = true;
     bool busy;
     bool webAuthnSupported;
+    bool passkeyPlatformSupported;
     bool addingPasskey;
+    bool addingPlatformPasskey;
     string newPasskeyName = string.Empty;
     string passkeyError = string.Empty;
     string passkeySuccess = string.Empty;
@@ -170,6 +180,8 @@ else
         if (firstRender)
         {
             webAuthnSupported = await JS.InvokeAsync<bool>("owAuth.isWebAuthnSupported");
+            if (webAuthnSupported)
+                passkeyPlatformSupported = await JS.InvokeAsync<bool>("owAuth.isPasskeySupported");
             StateHasChanged();
         }
 
@@ -220,9 +232,10 @@ else
         status = await Api.GetSecurityStatusAsync();
     }
 
-    void ShowAddPasskey()
+    void ShowAddPasskey(bool platform)
     {
         addingPasskey = true;
+        addingPlatformPasskey = platform;
         passkeyError = string.Empty;
         passkeySuccess = string.Empty;
         newPasskeyName = string.Empty;
@@ -236,7 +249,7 @@ else
 
         try
         {
-            string optionsJson = await Api.GetPasskeyRegisterOptionsAsync(new RegisterPasskeyNameDto { Name = newPasskeyName });
+            string optionsJson = await Api.GetPasskeyRegisterOptionsAsync(new RegisterPasskeyNameDto { Name = newPasskeyName, Platform = addingPlatformPasskey });
             string credentialJson = await JS.InvokeAsync<string>("owAuth.passkeyRegister", optionsJson);
             (PasskeyInfoDto? info, string? regError) = await Api.CompletePasskeyRegisterAsync(credentialJson);
 

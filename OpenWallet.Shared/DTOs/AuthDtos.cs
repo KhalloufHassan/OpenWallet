@@ -67,4 +67,5 @@ public class PasskeyInfoDto
 public class RegisterPasskeyNameDto
 {
     public string Name { get; set; } = string.Empty;
+    public bool Platform { get; set; }
 }

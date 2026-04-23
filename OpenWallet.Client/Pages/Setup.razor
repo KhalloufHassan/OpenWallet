@@ -81,8 +81,11 @@
         if (string.IsNullOrWhiteSpace(dto.Username))
         { error = "Username is required."; return; }
 
-        if (dto.Password.Length < 6)
-        { error = "Password must be at least 6 characters."; return; }
+        if (dto.Password.Length < 12)
+        { error = "Password must be at least 12 characters."; return; }
+
+        if (!dto.Password.Any(char.IsDigit) || !dto.Password.Any(char.IsLower))
+        { error = "Password must contain at least one digit and one lowercase letter."; return; }
 
         if (dto.Password != confirmPassword)
         { error = "Passwords do not match."; return; }
@@ -91,12 +94,12 @@
         { error = "Account name is required."; return; }
 
         busy = true;
-        bool ok = await Api.CompleteSetupAsync(dto);
+        string? setupError = await Api.CompleteSetupAsync(dto);
         busy = false;
 
-        if (ok)
+        if (setupError == null)
             Nav.NavigateTo("/", forceLoad: true);
         else
-            error = "Setup failed. It may have already been completed.";
+            error = setupError;
     }
 }
