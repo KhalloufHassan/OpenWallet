@@ -134,12 +134,16 @@ public class PasskeysController(
     /// <summary>Begins passkey authentication — returns AssertionOptions. Does not require auth.</summary>
     [HttpPost("login/options")]
     [AllowAnonymous]
-    public IActionResult LoginOptions()
+    public IActionResult LoginOptions([FromQuery] bool platform = false)
     {
         List<PublicKeyCredentialDescriptor> allowedCreds = db.PasskeyCredentials
             .AsEnumerable()
+            .Where(p => !platform || p.Transports.Contains("internal"))
             .Select(p => new PublicKeyCredentialDescriptor(p.CredentialId))
             .ToList();
+
+        if (platform && allowedCreds.Count == 0)
+            return NoContent();
 
         AssertionOptions options = fido2.GetAssertionOptions(new GetAssertionOptionsParams
         {

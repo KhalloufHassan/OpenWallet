@@ -91,9 +91,11 @@ public class ApiClient(HttpClient http)
         return r.IsSuccessStatusCode;
     }
 
-    public async Task<string> GetPasskeyLoginOptionsAsync()
+    public async Task<string?> GetPasskeyLoginOptionsAsync(bool platform = false)
     {
-        HttpResponseMessage r = await http.PostAsync("api/auth/passkey/login/options", null);
+        string url = platform ? "api/auth/passkey/login/options?platform=true" : "api/auth/passkey/login/options";
+        HttpResponseMessage r = await http.PostAsync(url, null);
+        if (r.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
         return await r.Content.ReadAsStringAsync();
     }
 

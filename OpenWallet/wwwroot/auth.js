@@ -24,6 +24,12 @@ window.owAuth = {
         } catch { return false; }
     },
 
+    hasPlatformKey: () => localStorage.getItem('ow_platform_key') === '1',
+    setPlatformKey: (val) => {
+        if (val) localStorage.setItem('ow_platform_key', '1');
+        else localStorage.removeItem('ow_platform_key');
+    },
+
     passkeyRegister: async (optionsJson) => {
         const options = JSON.parse(optionsJson);
         options.challenge = base64UrlDecode(options.challenge);

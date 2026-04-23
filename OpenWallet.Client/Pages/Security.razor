@@ -262,6 +262,8 @@ else
             addingPasskey = false;
             passkeySuccess = $"Passkey \"{info.Name}\" registered successfully.";
             status = await Api.GetSecurityStatusAsync();
+            if (addingPlatformPasskey)
+                await JS.InvokeVoidAsync("owAuth.setPlatformKey", true);
         }
         catch (JSException jsEx)
         {
@@ -288,8 +290,15 @@ else
         busy = false;
 
         if (ok)
+        {
             status = await Api.GetSecurityStatusAsync();
+            bool anyPlatform = status?.Passkeys.Any() == true;
+            if (!anyPlatform)
+                await JS.InvokeVoidAsync("owAuth.setPlatformKey", false);
+        }
         else
+        {
             passkeyError = "Failed to delete passkey.";
+        }
     }
 }

@@ -41,7 +41,7 @@
         </button>
         @if (webAuthnSupported)
         {
-            <button class="btn btn-outline-secondary w-100" @onclick="DoPasskeyLogin" disabled="@busy">
+            <button class="btn btn-outline-secondary w-100" @onclick="() => DoPasskeyLogin()" disabled="@busy">
                 <i class="bi bi-key me-1"></i>@(Locked ? "Unlock with Passkey" : "Use a Passkey")
             </button>
         }
@@ -73,12 +73,25 @@
     string error = string.Empty;
     bool busy;
     bool webAuthnSupported;
+    bool autoTriggered;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!firstRender) return;
+        try
         {
             webAuthnSupported = await JS.InvokeAsync<bool>("owAuth.isWebAuthnSupported");
+            bool hasPlatformKey = await JS.InvokeAsync<bool>("owAuth.hasPlatformKey");
+            StateHasChanged();
+
+            if (webAuthnSupported && hasPlatformKey && !autoTriggered)
+            {
+                autoTriggered = true;
+                await DoPasskeyLogin(platformOnly: true);
+            }
+        }
+        catch
+        {
             StateHasChanged();
         }
     }
@@ -126,13 +139,14 @@
         Nav.NavigateTo("/", forceLoad: true);
     }
 
-    async Task DoPasskeyLogin()
+    async Task DoPasskeyLogin(bool platformOnly = false)
     {
         busy = true;
         error = string.Empty;
         try
         {
-            string optionsJson = await Api.GetPasskeyLoginOptionsAsync();
+            string? optionsJson = await Api.GetPasskeyLoginOptionsAsync(platform: platformOnly);
+            if (optionsJson == null) return;
             string assertionJson = await JS.InvokeAsync<string>("owAuth.passkeyAuthenticate", optionsJson);
             LoginResultDto result = await Api.CompletePasskeyLoginAsync(assertionJson);
 
@@ -146,17 +160,18 @@
         }
         catch (JSException jsEx)
         {
-            error = jsEx.Message.Contains("cancelled") || jsEx.Message.Contains("abort")
-                ? "Passkey sign-in was cancelled."
-                : "Passkey authentication failed.";
+            bool cancelled = jsEx.Message.Contains("cancelled") || jsEx.Message.Contains("abort") || jsEx.Message.Contains("dismissed");
+            error = cancelled ? string.Empty : "Passkey authentication failed.";
         }
         catch
         {
-            error = "Passkey authentication failed.";
+            if (!platformOnly)
+                error = "Passkey authentication failed.";
         }
         finally
         {
             busy = false;
+            StateHasChanged();
         }
     }
 
