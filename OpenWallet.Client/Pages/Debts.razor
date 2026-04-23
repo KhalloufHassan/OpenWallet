@@ -125,7 +125,7 @@ else
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Total Amount</label>
-                            <input type="number" class="form-control" @bind="form.Amount" step="0.01" min="0" />
+                            <CalcInput Value="form.Amount" ValueChanged="v => form.Amount = v" />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Direction</label>

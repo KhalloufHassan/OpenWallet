@@ -1,0 +1,189 @@
+@using System.Globalization
+
+<div class="calc-input">
+    <button type="button" class="cat-picker-trigger @(open ? "open" : "")" @onclick="Toggle">
+        <span class="flex-grow-1 @(Value == 0 ? "text-muted" : "")">
+            @(Value == 0 ? "0.00" : Value.ToString("N2", CultureInfo.InvariantCulture))
+        </span>
+        <i class="bi bi-calculator opacity-50 ms-2"></i>
+    </button>
+
+    @if (open)
+    {
+        <div class="cat-picker-backdrop" @onclick="Confirm"></div>
+
+        <div class="calc-panel">
+            <div class="calc-screen">
+                <div class="calc-expr">@(_op != null ? $"{_stored.ToString("N2", CultureInfo.InvariantCulture)} {_op}" : " ")</div>
+                <div class="calc-display-val">@_display</div>
+            </div>
+
+            <div class="calc-grid">
+                <button type="button" class="calc-btn calc-btn-fn" @onclick='() => Clear()'>C</button>
+                <button type="button" class="calc-btn calc-btn-fn" @onclick='() => Backspace()'>⌫</button>
+                <button type="button" class="calc-btn calc-btn-op" @onclick='() => Operator("÷")'>÷</button>
+                <button type="button" class="calc-btn calc-btn-op" @onclick='() => Operator("×")'>×</button>
+
+                <button type="button" class="calc-btn" @onclick='() => Digit("7")'>7</button>
+                <button type="button" class="calc-btn" @onclick='() => Digit("8")'>8</button>
+                <button type="button" class="calc-btn" @onclick='() => Digit("9")'>9</button>
+                <button type="button" class="calc-btn calc-btn-op" @onclick='() => Operator("−")'>−</button>
+
+                <button type="button" class="calc-btn" @onclick='() => Digit("4")'>4</button>
+                <button type="button" class="calc-btn" @onclick='() => Digit("5")'>5</button>
+                <button type="button" class="calc-btn" @onclick='() => Digit("6")'>6</button>
+                <button type="button" class="calc-btn calc-btn-op" @onclick='() => Operator("+")'>+</button>
+
+                <button type="button" class="calc-btn" @onclick='() => Digit("1")'>1</button>
+                <button type="button" class="calc-btn" @onclick='() => Digit("2")'>2</button>
+                <button type="button" class="calc-btn" @onclick='() => Digit("3")'>3</button>
+                <button type="button" class="calc-btn calc-btn-eq calc-btn-eq-tall" @onclick="Equals">=</button>
+
+                <button type="button" class="calc-btn calc-btn-wide" @onclick='() => Digit("0")'>0</button>
+                <button type="button" class="calc-btn" @onclick="Dot">.</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public decimal Value { get; set; }
+    [Parameter] public EventCallback<decimal> ValueChanged { get; set; }
+
+    bool open;
+    string _display = "0";
+    decimal _stored;
+    string? _op;
+    bool _fresh = true;
+
+    void Toggle()
+    {
+        open = !open;
+        if (open)
+        {
+            _display = Value == 0 ? "0" : Value.ToString("G", CultureInfo.InvariantCulture);
+            _stored = 0;
+            _op = null;
+            _fresh = true;
+        }
+    }
+
+    void Digit(string d)
+    {
+        if (_fresh)
+        {
+            _display = d;
+            _fresh = false;
+        }
+        else
+        {
+            if (_display == "0") _display = d;
+            else _display += d;
+        }
+        LimitLength();
+    }
+
+    void Dot()
+    {
+        if (_fresh)
+        {
+            _display = "0.";
+            _fresh = false;
+        }
+        else if (!_display.Contains('.'))
+        {
+            _display += ".";
+        }
+    }
+
+    void Backspace()
+    {
+        if (_fresh) return;
+        if (_display.Length <= 1)
+        {
+            _display = "0";
+            _fresh = true;
+        }
+        else
+        {
+            _display = _display[..^1];
+            if (_display == "-") { _display = "0"; _fresh = true; }
+        }
+    }
+
+    void Clear()
+    {
+        _display = "0";
+        _stored = 0;
+        _op = null;
+        _fresh = true;
+    }
+
+    void Operator(string op)
+    {
+        if (!_fresh && _op != null)
+            Calculate();
+
+        if (decimal.TryParse(_display, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal v))
+            _stored = v;
+
+        _op = op;
+        _fresh = true;
+    }
+
+    void Equals()
+    {
+        if (_op != null && !_fresh)
+            Calculate();
+
+        _op = null;
+        _fresh = true;
+        NotifyParent();
+        open = false;
+    }
+
+    async Task Confirm()
+    {
+        if (_op != null && !_fresh)
+            Calculate();
+        _op = null;
+        _fresh = true;
+        NotifyParent();
+        open = false;
+        await Task.CompletedTask;
+    }
+
+    void Calculate()
+    {
+        if (!decimal.TryParse(_display, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal right))
+            return;
+
+        decimal result = _op switch
+        {
+            "+" => _stored + right,
+            "−" => _stored - right,
+            "×" => _stored * right,
+            "÷" => right == 0 ? _stored : _stored / right,
+            _ => right
+        };
+
+        result = Math.Round(result, 2);
+        _display = result.ToString("G", CultureInfo.InvariantCulture);
+        _stored = result;
+    }
+
+    void NotifyParent()
+    {
+        if (decimal.TryParse(_display, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal v))
+            ValueChanged.InvokeAsync(Math.Abs(Math.Round(v, 2)));
+    }
+
+    void LimitLength()
+    {
+        int dotIdx = _display.IndexOf('.');
+        if (dotIdx >= 0 && _display.Length - dotIdx - 1 > 2)
+            _display = _display[..^1];
+        if (dotIdx < 0 && _display.Length > 10)
+            _display = _display[..^1];
+    }
+}
