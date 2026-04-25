@@ -1,7 +1,6 @@
 @using OpenWallet.Shared.DTOs
 
-<div class="cat-picker">
-    @* Trigger *@
+<div class="cat-picker @(FullCover ? "full-cover" : "")">
     <button type="button" class="cat-picker-trigger @(open ? "open" : "")" @onclick="Toggle">
         @if (Selected != null)
         {
@@ -18,12 +17,13 @@
         <i class="bi bi-chevron-down ms-auto cat-picker-chevron @(open ? "rotated" : "")"></i>
     </button>
 
-    @* Panel *@
     @if (open)
     {
-        <div class="cat-picker-backdrop" @onclick="Close"></div>
-        <div class="cat-picker-panel">
-            @* Search *@
+        @if (!FullCover)
+        {
+            <div class="cat-picker-backdrop" @onclick="Close"></div>
+        }
+        <div class="cat-picker-panel @(FullCover ? "full-cover" : "")">
             <div class="cat-picker-search">
                 <i class="bi bi-search text-muted me-2"></i>
                 <input class="cat-picker-input" @bind="search" @bind:event="oninput"
@@ -34,9 +34,12 @@
                         <i class="bi bi-x"></i>
                     </button>
                 }
+                @if (FullCover)
+                {
+                    <button class="cat-picker-done" @onclick="Close">Done</button>
+                }
             </div>
 
-            @* Breadcrumb / back button *@
             @if (drillParent != null && string.IsNullOrEmpty(search))
             {
                 <div class="cat-picker-breadcrumb">
@@ -45,17 +48,35 @@
                     </button>
                     <span class="small fw-semibold text-truncate">@drillParent.Name</span>
                 </div>
-                @* Allow selecting the parent itself *@
                 <div class="cat-picker-use-parent" @onclick="() => Select(drillParent)">
                     <i class="bi bi-check2 me-2"></i>Use "@drillParent.Name"
                 </div>
             }
 
-            @* Category rows *@
             <div class="cat-picker-list @listAnim" @key="listKey">
                 @if (!VisibleCategories.Any())
                 {
                     <div class="cat-picker-empty">No categories found</div>
+                }
+                else if (ShowFrequentSection)
+                {
+                    @foreach (CategoryDto cat in FrequentCategories)
+                    {
+                        <CategoryRow Category="cat"
+                                     Selected="cat.Id == Value"
+                                     ShowDrill="false"
+                                     OnSelect="() => Select(cat)"
+                                     OnDrill="() => Select(cat)" />
+                    }
+                    <div class="cat-picker-separator"></div>
+                    @foreach (CategoryDto cat in VisibleCategories)
+                    {
+                        <CategoryRow Category="cat"
+                                     Selected="cat.Id == Value"
+                                     ShowDrill="@(cat.SubCategories.Count > 0)"
+                                     OnSelect="() => Select(cat)"
+                                     OnDrill="() => DrillInto(cat)" />
+                    }
                 }
                 else
                 {
@@ -78,6 +99,8 @@
     [Parameter] public int? Value { get; set; }
     [Parameter] public EventCallback<int?> ValueChanged { get; set; }
     [Parameter] public string Placeholder { get; set; } = "Select category…";
+    [Parameter] public List<int> FrequentIds { get; set; } = [];
+    [Parameter] public bool FullCover { get; set; }
 
     bool open;
     string search = string.Empty;
@@ -89,6 +112,14 @@
     CategoryDto? Selected => Value.HasValue
         ? FlatAll(Categories).FirstOrDefault(c => c.Id == Value.Value)
         : null;
+
+    bool ShowFrequentSection => FrequentIds.Count > 0
+        && string.IsNullOrEmpty(search)
+        && drillParent == null;
+
+    IEnumerable<CategoryDto> FrequentCategories => FrequentIds
+        .Select(id => FlatAll(Categories).FirstOrDefault(c => c.Id == id))
+        .OfType<CategoryDto>();
 
     string SelectedBg
     {

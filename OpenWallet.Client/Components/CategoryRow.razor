@@ -1,6 +1,6 @@
 @using OpenWallet.Shared.DTOs
 
-<div class="cat-row @(Selected ? "cat-row-selected" : "")" @onclick="() => OnSelect.InvokeAsync()">
+<div class="cat-row @(Selected ? "cat-row-selected" : "")" @onclick="HandleClick">
     <div class="record-category-circle flex-shrink-0" style="background:@CircleBg">
         <i class="bi @Category.Icon" style="color:@Category.Color; font-size:.95rem;"></i>
     </div>
@@ -13,9 +13,7 @@
     </div>
     @if (Category.SubCategories.Count > 0 && ShowDrill)
     {
-        <button type="button" class="cat-drill-btn" @onclick="() => OnDrill.InvokeAsync()" @onclick:stopPropagation>
-            <i class="bi bi-chevron-right"></i>
-        </button>
+        <i class="bi bi-chevron-right cat-drill-chevron"></i>
     }
 </div>
 
@@ -25,6 +23,14 @@
     [Parameter] public bool ShowDrill { get; set; } = true;
     [Parameter] public EventCallback OnSelect { get; set; }
     [Parameter] public EventCallback OnDrill { get; set; }
+
+    void HandleClick()
+    {
+        if (ShowDrill && Category.SubCategories.Count > 0)
+            OnDrill.InvokeAsync();
+        else
+            OnSelect.InvokeAsync();
+    }
 
     string CircleBg
     {
