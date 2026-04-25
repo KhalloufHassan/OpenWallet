@@ -25,7 +25,7 @@ public class RecordsManager(AppDbContext db)
 
         if (filter.CategoryId.HasValue)
             query = query.Where(r => r.CategoryId == filter.CategoryId.Value
-                                  || r.Category.ParentCategoryId == filter.CategoryId.Value);
+                                  || (r.Category != null && r.Category.ParentCategoryId == filter.CategoryId.Value));
 
         if (filter.StoreId.HasValue)
             query = query.Where(r => r.StoreId == filter.StoreId.Value);
@@ -92,7 +92,7 @@ public class RecordsManager(AppDbContext db)
         Record record = new()
         {
             AccountId = dto.AccountId,
-            CategoryId = dto.CategoryId,
+            CategoryId = dto.CategoryId == 0 ? null : dto.CategoryId,
             StoreId = dto.StoreId,
             Type = dto.Type,
             Amount = dto.Type == RecordType.Expense ? -Math.Abs(dto.Amount) : Math.Abs(dto.Amount),

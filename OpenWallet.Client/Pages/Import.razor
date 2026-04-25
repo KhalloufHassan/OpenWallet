@@ -1,0 +1,546 @@
+@page "/import"
+@using OpenWallet.Client.Services
+@using OpenWallet.Shared.DTOs
+@using OpenWallet.Shared.Models
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
+@inject ApiClient Api
+
+<PageTitle>Import - OpenWallet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0 fw-semibold">Import CSV</h4>
+</div>
+
+<div class="widget-card mb-3">
+    <div class="rf-section-label">CSV Data</div>
+    <InputFile OnChange="OnFileSelected" accept=".csv,.txt" class="form-control form-control-sm mb-2" />
+    <div class="small text-muted mb-1">or paste CSV content (semicolon-separated):</div>
+    <textarea class="form-control mb-3" style="font-family:monospace; font-size:0.75rem; min-height:120px;"
+              @bind="csvText" placeholder="account;category;currency;amount;ref_currency_amount;type;payment_type;note;date;transfer;payee;labels"></textarea>
+    <button class="btn btn-primary btn-sm" @onclick="ParseCsv" disabled="@string.IsNullOrWhiteSpace(csvText)">
+        <i class="bi bi-upload me-1"></i>Parse CSV
+    </button>
+    @if (!string.IsNullOrEmpty(parseError))
+    {
+        <div class="alert alert-danger py-2 mt-2 small">@parseError</div>
+    }
+</div>
+
+@if (parsed)
+{
+    <div class="widget-card mb-3">
+        <div class="rf-section-label">Account Mappings</div>
+        <div class="small text-muted mb-3">Map each CSV account name to an account in OpenWallet. Rows with unmapped accounts are skipped.</div>
+        @foreach (string csvName in accountMap.Keys.OrderBy(k => k).ToList())
+        {
+            string key = csvName;
+            <div class="d-flex align-items-center gap-3 mb-2">
+                <code class="small flex-shrink-0" style="min-width:160px;">@key</code>
+                <i class="bi bi-arrow-right text-muted flex-shrink-0"></i>
+                <select class="form-select form-select-sm"
+                        value="@accountMap[key]"
+                        @onchange="e => { if (int.TryParse(e.Value?.ToString(), out int v)) accountMap[key] = v; }">
+                    <option value="0">— skip rows with this account —</option>
+                    @foreach (AccountDto a in accounts)
+                    {
+                        <option value="@a.Id">@a.Name (@a.Currency)</option>
+                    }
+                </select>
+            </div>
+        }
+    </div>
+
+    <div class="widget-card mb-3">
+        <div class="rf-section-label">Category Mappings</div>
+        <div class="small text-muted mb-3">Map each CSV category to a category in OpenWallet. Unmapped categories import without a category.</div>
+        @foreach (string csvName in categoryMap.Keys.OrderBy(k => k).ToList())
+        {
+            string key = csvName;
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <code class="small flex-shrink-0" style="min-width:160px;">@key</code>
+                <i class="bi bi-arrow-right text-muted flex-shrink-0"></i>
+                <div class="flex-grow-1">
+                    <CategoryPicker Categories="categories"
+                                   Value="categoryMap[key]"
+                                   ValueChanged="id => categoryMap[key] = id"
+                                   Placeholder="— no category —" />
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (labelMap.Count > 0)
+    {
+        <div class="widget-card mb-3">
+            <div class="rf-section-label">Label → Tag Mappings</div>
+            <div class="small text-muted mb-3">Map CSV labels to tags in OpenWallet. Unmapped labels are skipped.</div>
+            @foreach (string csvName in labelMap.Keys.OrderBy(k => k).ToList())
+            {
+                string key = csvName;
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <code class="small flex-shrink-0" style="min-width:160px;">@key</code>
+                    <i class="bi bi-arrow-right text-muted flex-shrink-0"></i>
+                    <select class="form-select form-select-sm"
+                            value="@labelMap[key]"
+                            @onchange="e => { if (int.TryParse(e.Value?.ToString(), out int v)) labelMap[key] = v; }">
+                        <option value="0">— skip —</option>
+                        @foreach (TagDto t in allTags)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+        </div>
+    }
+
+    @if (transferCount > 0)
+    {
+        <div class="widget-card mb-3">
+            <div class="rf-section-label">Transfer Rows (@transferCount found)</div>
+            <div class="small text-muted mb-2">
+                Transfers in this CSV have no destination account. Choose how to import them:
+            </div>
+            <select class="form-select form-select-sm" style="max-width:380px;" @bind="transferMode">
+                <option value="@TransferMode.AsExpense">Expense — money left this account (recommended)</option>
+                <option value="@TransferMode.AsTransfer">Transfer — unlinked record, no destination</option>
+            </select>
+        </div>
+    }
+
+    <div class="widget-card mb-3">
+        <div class="rf-section-label">Generate SQL</div>
+        @{
+            int validCount = rows.Count(r => !r.HasError);
+            int errorCount = rows.Count(r => r.HasError);
+        }
+        <div class="small text-muted mb-3">
+            @rows.Count total rows &nbsp;·&nbsp;
+            <span class="text-success">@validCount parseable</span>
+            @if (errorCount > 0)
+            {
+                <span>&nbsp;·&nbsp; <span class="text-danger">@errorCount parse errors</span></span>
+            }
+            @if (transferCount > 0)
+            {
+                <span>&nbsp;·&nbsp; @transferCount transfers</span>
+            }
+        </div>
+
+        @if (errorCount > 0)
+        {
+            <details class="mb-3">
+                <summary class="small text-danger" style="cursor:pointer">Show @errorCount parse error(s)</summary>
+                <ul class="mt-2 mb-0 small text-danger">
+                    @foreach (CsvRow r in rows.Where(r => r.HasError))
+                    {
+                        <li>@r.ErrorMessage</li>
+                    }
+                </ul>
+            </details>
+        }
+
+        <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary btn-sm" @onclick="ImportDirectly"
+                    disabled="@(importing || rows.Count(r => !r.HasError) == 0)">
+                @if (importing)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                    <span>Importing @importProgress / @importTotal…</span>
+                }
+                else
+                {
+                    <i class="bi bi-cloud-upload me-1"></i>
+                    <span>Import Directly</span>
+                }
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="GenerateSql"
+                    disabled="@importing">
+                <i class="bi bi-code-slash me-1"></i>Generate SQL
+            </button>
+        </div>
+
+        @if (importing)
+        {
+            <div class="mt-3">
+                <div class="progress" style="height:6px;">
+                    <div class="progress-bar" style="width:@(importTotal > 0 ? importProgress * 100 / importTotal : 0)%"></div>
+                </div>
+            </div>
+        }
+
+        @if (importDone)
+        {
+            <div class="mt-3 alert @(importErrors.Count == 0 ? "alert-success" : "alert-warning") py-2">
+                <i class="bi @(importErrors.Count == 0 ? "bi-check-circle" : "bi-exclamation-triangle") me-2"></i>
+                @importedCount record(s) imported successfully.
+                @if (importErrors.Count > 0)
+                {
+                    <span>@importErrors.Count failed.</span>
+                }
+            </div>
+            @if (importErrors.Count > 0)
+            {
+                <details>
+                    <summary class="small text-danger" style="cursor:pointer">Show @importErrors.Count error(s)</summary>
+                    <ul class="mt-2 mb-0 small text-danger">
+                        @foreach (string err in importErrors)
+                        {
+                            <li>@err</li>
+                        }
+                    </ul>
+                </details>
+            }
+        }
+
+        @if (!string.IsNullOrEmpty(sql))
+        {
+            <div class="mt-3">
+                <div class="small text-muted mb-2">
+                    Run inside <code>psql</code> or any PostgreSQL client. <kbd>Ctrl+A</kbd> to select all.
+                </div>
+                <pre class="form-control" style="font-size:0.72rem; min-height:320px; max-height:600px; overflow:auto; white-space:pre; color:#e6edf3; background:#0d1117; border-color:#30363d;">@sql</pre>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    enum TransferMode { AsExpense, AsTransfer }
+
+    sealed record CsvRow(
+        string Account,
+        string Category,
+        decimal Amount,
+        string Type,
+        string Note,
+        DateTime Date,
+        bool Transfer,
+        List<string> Labels,
+        bool HasError = false,
+        string ErrorMessage = "");
+
+    List<AccountDto> accounts = [];
+    List<CategoryDto> categories = [];
+    List<TagDto> allTags = [];
+
+    string csvText = string.Empty;
+    string parseError = string.Empty;
+    string sql = string.Empty;
+    bool parsed;
+    List<CsvRow> rows = [];
+    Dictionary<string, int> accountMap = new();
+    Dictionary<string, int?> categoryMap = new();
+    Dictionary<string, int> labelMap = new();
+    TransferMode transferMode = TransferMode.AsExpense;
+
+    bool importing;
+    bool importDone;
+    int importProgress;
+    int importTotal;
+    int importedCount;
+    List<string> importErrors = [];
+
+    int transferCount => rows.Count(r => !r.HasError && r.Transfer);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Task<List<AccountDto>> aTask = Api.GetAccountsAsync();
+        Task<List<CategoryDto>> cTask = Api.GetCategoriesAsync();
+        Task<List<TagDto>> tTask = Api.GetTagsAsync();
+        await Task.WhenAll(aTask, cTask, tTask);
+        accounts = aTask.Result;
+        categories = cTask.Result;
+        allTags = tTask.Result;
+    }
+
+    async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        using StreamReader reader = new(e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+        csvText = await reader.ReadToEndAsync();
+    }
+
+    void ParseCsv()
+    {
+        parseError = string.Empty;
+        rows = [];
+        accountMap = new();
+        categoryMap = new();
+        labelMap = new();
+        sql = string.Empty;
+        parsed = false;
+
+        List<List<string>> allRows = ParseSemicolonCsv(csvText)
+            .Where(r => r.Any(f => !string.IsNullOrWhiteSpace(f)))
+            .ToList();
+
+        if (allRows.Count < 2)
+        {
+            parseError = "CSV must have a header row and at least one data row.";
+            return;
+        }
+
+        string[] headers = allRows[0].Select(h => h.Trim()).ToArray();
+        int Idx(string name) => Array.FindIndex(headers, h => h.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+        int idxAccount  = Idx("account");
+        int idxCategory = Idx("category");
+        int idxAmount   = Idx("amount");
+        int idxType     = Idx("type");
+        int idxNote     = Idx("note");
+        int idxDate     = Idx("date");
+        int idxTransfer = Idx("transfer");
+        int idxLabels   = Idx("labels");
+
+        if (idxAccount < 0 || idxAmount < 0 || idxType < 0 || idxDate < 0)
+        {
+            parseError = "Missing required columns: account, amount, type, date.";
+            return;
+        }
+
+        for (int i = 1; i < allRows.Count; i++)
+        {
+            List<string> cols = allRows[i];
+            string SafeCol(int idx) => idx >= 0 && idx < cols.Count ? cols[idx].Trim() : string.Empty;
+
+            try
+            {
+                string account   = SafeCol(idxAccount);
+                string category  = SafeCol(idxCategory);
+                string amountStr = SafeCol(idxAmount);
+                string typeStr   = SafeCol(idxType);
+                string note      = SafeCol(idxNote);
+                string dateStr   = SafeCol(idxDate);
+                bool transfer    = SafeCol(idxTransfer).Equals("true", StringComparison.OrdinalIgnoreCase);
+                string labelsStr = SafeCol(idxLabels);
+
+                if (!decimal.TryParse(amountStr, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal amount))
+                    throw new FormatException($"Invalid amount: {amountStr}");
+
+                if (!DateTime.TryParse(dateStr, null, DateTimeStyles.RoundtripKind, out DateTime date))
+                    throw new FormatException($"Invalid date: {dateStr}");
+
+                List<string> labels = string.IsNullOrWhiteSpace(labelsStr)
+                    ? []
+                    : [.. labelsStr.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                          .Select(l => l.Trim())
+                          .Where(l => l.Length > 0)];
+
+                rows.Add(new CsvRow(account, category, amount, typeStr, note, date, transfer, labels));
+
+                if (!string.IsNullOrWhiteSpace(account) && !accountMap.ContainsKey(account))
+                    accountMap[account] = 0;
+                if (!string.IsNullOrWhiteSpace(category) && !categoryMap.ContainsKey(category))
+                    categoryMap[category] = null;
+                foreach (string label in labels.Where(l => !labelMap.ContainsKey(l)))
+                    labelMap[label] = 0;
+            }
+            catch (Exception ex)
+            {
+                rows.Add(new CsvRow(string.Empty, string.Empty, 0, string.Empty, string.Empty,
+                    DateTime.UtcNow, false, [], true, $"Row {i + 1}: {ex.Message}"));
+            }
+        }
+
+        parsed = true;
+    }
+
+    static List<List<string>> ParseSemicolonCsv(string text)
+    {
+        List<List<string>> result = [];
+        List<string> row = [];
+        System.Text.StringBuilder field = new();
+        bool inQuotes = false;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+
+            if (inQuotes)
+            {
+                if (c == '"' && i + 1 < text.Length && text[i + 1] == '"')
+                {
+                    field.Append('"');
+                    i++;
+                }
+                else if (c == '"')
+                {
+                    inQuotes = false;
+                }
+                else
+                {
+                    field.Append(c);
+                }
+            }
+            else
+            {
+                if (c == '"')
+                {
+                    inQuotes = true;
+                }
+                else if (c == ';')
+                {
+                    row.Add(field.ToString());
+                    field.Clear();
+                }
+                else if (c == '\r')
+                {
+                    // skip bare CR; CRLF is handled when \n follows
+                }
+                else if (c == '\n')
+                {
+                    row.Add(field.ToString());
+                    field.Clear();
+                    result.Add(row);
+                    row = [];
+                }
+                else
+                {
+                    field.Append(c);
+                }
+            }
+        }
+
+        if (field.Length > 0 || row.Count > 0)
+        {
+            row.Add(field.ToString());
+            result.Add(row);
+        }
+
+        return result;
+    }
+
+    async Task ImportDirectly()
+    {
+        importing = true;
+        importDone = false;
+        importErrors = [];
+        importedCount = 0;
+        sql = string.Empty;
+
+        List<CsvRow> importable = rows
+            .Where(r => !r.HasError && accountMap.TryGetValue(r.Account, out int aid) && aid != 0)
+            .ToList();
+
+        importTotal = importable.Count;
+        importProgress = 0;
+
+        foreach (CsvRow row in importable)
+        {
+            int accountId = accountMap[row.Account];
+            int? categoryId = categoryMap.TryGetValue(row.Category, out int? cid) ? cid : null;
+
+            RecordType type;
+            if (row.Transfer)
+                type = RecordType.Expense;
+            else
+                type = row.Type.Equals("Income", StringComparison.OrdinalIgnoreCase) ? RecordType.Income : RecordType.Expense;
+
+            List<int> tagIds = row.Labels
+                .Select(l => labelMap.TryGetValue(l, out int tid) ? tid : 0)
+                .Where(tid => tid > 0)
+                .ToList();
+
+            CreateRecordDto dto = new()
+            {
+                AccountId  = accountId,
+                CategoryId = categoryId ?? 0,
+                Type       = type,
+                Amount     = Math.Abs(row.Amount),
+                DateTime   = row.Date,
+                Notes      = row.Note,
+                TagIds     = tagIds
+            };
+
+            try
+            {
+                await Api.CreateRecordAsync(dto);
+                importedCount++;
+            }
+            catch (Exception ex)
+            {
+                importErrors.Add($"Row {importProgress + 1} ({row.Date:yyyy-MM-dd} / {row.Account}): {ex.Message}");
+            }
+
+            importProgress++;
+            StateHasChanged();
+        }
+
+        importing = false;
+        importDone = true;
+    }
+
+    void GenerateSql()
+    {
+        System.Text.StringBuilder sb = new();
+        int imported = 0;
+        int skipped  = 0;
+
+        sb.AppendLine("BEGIN;");
+        sb.AppendLine();
+
+        foreach (CsvRow row in rows.Where(r => !r.HasError))
+        {
+            if (!accountMap.TryGetValue(row.Account, out int accountId) || accountId == 0)
+            {
+                skipped++;
+                continue;
+            }
+
+            int? categoryId = categoryMap.TryGetValue(row.Category, out int? cid) ? cid : null;
+
+            RecordType type;
+            decimal amount;
+
+            if (row.Transfer)
+            {
+                type   = transferMode == TransferMode.AsTransfer ? RecordType.Transfer : RecordType.Expense;
+                amount = -Math.Abs(row.Amount);
+            }
+            else
+            {
+                type   = row.Type.Equals("Income", StringComparison.OrdinalIgnoreCase) ? RecordType.Income : RecordType.Expense;
+                amount = type == RecordType.Income ? Math.Abs(row.Amount) : -Math.Abs(row.Amount);
+            }
+
+            List<int> tagIds = row.Labels
+                .Select(l => labelMap.TryGetValue(l, out int tid) ? tid : 0)
+                .Where(tid => tid > 0)
+                .ToList();
+
+            string catSql    = categoryId.HasValue ? categoryId.Value.ToString() : "NULL";
+            string noteSql   = row.Note.Replace("'", "''");
+            string dateSql   = row.Date.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+            string amountSql = amount.ToString("F4", CultureInfo.InvariantCulture);
+            int    typeInt   = (int)type;
+
+            if (tagIds.Count > 0)
+            {
+                sb.AppendLine("WITH _r AS (");
+                sb.AppendLine($"  INSERT INTO \"Records\" (\"AccountId\", \"CategoryId\", \"Type\", \"Amount\", \"DateTime\", \"Notes\")");
+                sb.AppendLine($"  VALUES ({accountId}, {catSql}, {typeInt}, {amountSql}, '{dateSql}', '{noteSql}')");
+                sb.AppendLine("  RETURNING \"Id\"");
+                sb.AppendLine(")");
+                sb.AppendLine($"INSERT INTO \"RecordTags\" (\"RecordId\", \"TagId\")");
+                sb.AppendLine($"  SELECT \"Id\", unnest(ARRAY[{string.Join(", ", tagIds)}]) FROM _r;");
+            }
+            else
+            {
+                sb.AppendLine($"INSERT INTO \"Records\" (\"AccountId\", \"CategoryId\", \"Type\", \"Amount\", \"DateTime\", \"Notes\")");
+                sb.AppendLine($"VALUES ({accountId}, {catSql}, {typeInt}, {amountSql}, '{dateSql}', '{noteSql}');");
+            }
+
+            sb.AppendLine();
+            imported++;
+        }
+
+        sb.AppendLine("COMMIT;");
+        sb.AppendLine();
+        sb.AppendLine($"-- {imported} record(s) imported, {skipped} skipped (unmapped account)");
+        if (transferCount > 0)
+            sb.AppendLine($"-- {transferCount} transfer row(s) imported as {(transferMode == TransferMode.AsExpense ? "Expense" : "Transfer (unlinked)")}");
+
+        sql = sb.ToString();
+    }
+}

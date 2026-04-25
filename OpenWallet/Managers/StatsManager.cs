@@ -47,7 +47,8 @@ public class StatsManager(AppDbContext db, AccountsManager accountsManager, Reco
         if (total == 0) return [];
 
         return expenses
-            .GroupBy(r => r.Category)
+            .Where(r => r.Category != null)
+            .GroupBy(r => r.Category!)
             .Select(g => new CategoryExpenseDto
             {
                 CategoryId = g.Key.Id,
