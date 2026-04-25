@@ -105,10 +105,10 @@ else
                                 <CalcInput Value="transferDto.Amount" ValueChanged="v => transferDto.Amount = v" />
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Category</label>
+                                <label class="form-label">Category <span class="text-muted small">(optional)</span></label>
                                 <CategoryPicker Categories="categories"
-                                               Value="@(transferDto.CategoryId == 0 ? null : transferDto.CategoryId)"
-                                               ValueChanged="id => transferDto.CategoryId = id ?? 0" />
+                                               Value="transferDto.CategoryId"
+                                               ValueChanged="id => transferDto.CategoryId = id" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Date & Time</label>
@@ -491,6 +491,20 @@ else
             editingId = record.Id;
             currentAttachments = record.Attachments.ToList();
             recordAmount = Math.Abs(record.Amount);
+            if (transfer)
+            {
+                bool isOutgoing = record.Amount < 0;
+                transferDto = new CreateTransferDto
+                {
+                    FromAccountId = isOutgoing ? record.AccountId : (record.LinkedAccountId ?? 0),
+                    ToAccountId   = isOutgoing ? (record.LinkedAccountId ?? 0) : record.AccountId,
+                    CategoryId    = record.CategoryId == 0 ? null : record.CategoryId,
+                    Amount        = Math.Abs(record.Amount),
+                    DateTime      = record.DateTime,
+                    Notes         = record.Notes,
+                    TagIds        = record.Tags.Select(t => t.Id).ToList()
+                };
+            }
             recordForm = new CreateRecordDto
             {
                 AccountId = record.AccountId,
@@ -527,12 +541,15 @@ else
         {
             if (isTransfer)
             {
-                if (transferDto.FromAccountId == 0 || transferDto.ToAccountId == 0 || transferDto.CategoryId == 0)
+                if (transferDto.FromAccountId == 0 || transferDto.ToAccountId == 0)
                 {
                     error = "Please fill all required fields.";
                     return;
                 }
-                await Api.CreateTransferAsync(transferDto);
+                if (editingId == null)
+                    await Api.CreateTransferAsync(transferDto);
+                else
+                    await Api.UpdateTransferAsync(editingId.Value, transferDto);
             }
             else
             {
@@ -591,9 +608,14 @@ else
     async Task ExecuteDelete()
     {
         if (deleteTarget == null) return;
-        await Api.DeleteRecordAsync(deleteTarget.Id);
-        deleteTarget = null;
-        await LoadRecords();
+        try
+        {
+            await Api.DeleteRecordAsync(deleteTarget.Id);
+            deleteTarget = null;
+            await CloseModal();
+            await LoadRecords();
+        }
+        catch (Exception ex) { error = ex.Message; deleteTarget = null; }
     }
 
     static void ToggleTag(int tagId, List<int> tagIds)

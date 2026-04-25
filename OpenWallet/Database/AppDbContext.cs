@@ -23,37 +23,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<RecordTag>().HasKey(rt => new { rt.RecordId, rt.TagId });
-        modelBuilder.Entity<TemplateTag>().HasKey(tt => new { tt.TemplateId, tt.TagId });
-        modelBuilder.Entity<DebtRecord>().HasKey(dr => new { dr.DebtId, dr.RecordId });
-
-        modelBuilder.Entity<Category>()
-            .HasOne(c => c.ParentCategory)
-            .WithMany(c => c.SubCategories)
-            .HasForeignKey(c => c.ParentCategoryId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<Record>()
-            .HasOne(r => r.LinkedTransferRecord)
-            .WithMany()
-            .HasForeignKey(r => r.LinkedTransferRecordId)
-            .OnDelete(DeleteBehavior.SetNull);
-
-        modelBuilder.Entity<Record>()
-            .Property(r => r.Amount)
-            .HasPrecision(18, 4);
-
-        modelBuilder.Entity<Account>()
-            .Property(a => a.InitialAmount)
-            .HasPrecision(18, 4);
-
-        modelBuilder.Entity<Template>()
-            .Property(t => t.Amount)
-            .HasPrecision(18, 4);
-
-        modelBuilder.Entity<Debt>()
-            .Property(d => d.Amount)
-            .HasPrecision(18, 4);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
     }
 }

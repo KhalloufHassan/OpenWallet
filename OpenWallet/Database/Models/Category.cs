@@ -1,6 +1,9 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
 namespace OpenWallet.Database.Models;
 
-public class Category
+public class Category : IEntityTypeConfiguration<Category>
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -10,4 +13,12 @@ public class Category
     public Category ParentCategory { get; set; } = default!;
     public List<Category> SubCategories { get; set; } = [];
     public List<Record> Records { get; set; } = [];
+
+    public void Configure(EntityTypeBuilder<Category> builder)
+    {
+        builder.HasOne(c => c.ParentCategory)
+            .WithMany(c => c.SubCategories)
+            .HasForeignKey(c => c.ParentCategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
 }

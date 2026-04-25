@@ -1,8 +1,10 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using OpenWallet.Shared.Models;
 
 namespace OpenWallet.Database.Models;
 
-public class Template
+public class Template : IEntityTypeConfiguration<Template>
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -14,4 +16,9 @@ public class Template
     public decimal Amount { get; set; }
     public string Notes { get; set; } = string.Empty;
     public List<TemplateTag> TemplateTags { get; set; } = [];
+
+    public void Configure(EntityTypeBuilder<Template> builder)
+    {
+        builder.Property(t => t.Amount).HasPrecision(18, 4);
+    }
 }

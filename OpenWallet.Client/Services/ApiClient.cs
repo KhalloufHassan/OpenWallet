@@ -179,8 +179,25 @@ public class ApiClient(HttpClient http)
 
     public async Task<(RecordDto Outgoing, RecordDto Incoming)> CreateTransferAsync(CreateTransferDto dto)
     {
-        TransferResult? result = await (await http.PostAsJsonAsync("api/records/transfer", dto))
-            .Content.ReadFromJsonAsync<TransferResult>();
+        HttpResponseMessage response = await http.PostAsJsonAsync("api/records/transfer", dto);
+        if (!response.IsSuccessStatusCode)
+        {
+            string body = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(body) ? response.ReasonPhrase : body);
+        }
+        TransferResult? result = await response.Content.ReadFromJsonAsync<TransferResult>();
+        return (result?.Outgoing ?? new(), result?.Incoming ?? new());
+    }
+
+    public async Task<(RecordDto Outgoing, RecordDto Incoming)> UpdateTransferAsync(int id, CreateTransferDto dto)
+    {
+        HttpResponseMessage response = await http.PutAsJsonAsync($"api/records/transfer/{id}", dto);
+        if (!response.IsSuccessStatusCode)
+        {
+            string body = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(body) ? response.ReasonPhrase : body);
+        }
+        TransferResult? result = await response.Content.ReadFromJsonAsync<TransferResult>();
         return (result?.Outgoing ?? new(), result?.Incoming ?? new());
     }
 

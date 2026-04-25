@@ -42,6 +42,18 @@ public class RecordsController(RecordsManager manager, AttachmentsManager attach
         return Ok(new { Outgoing = outgoing, Incoming = incoming });
     }
 
+    /// <summary>Updates an existing transfer (both sides).</summary>
+    [HttpPut("transfer/{id:int}")]
+    public async Task<ActionResult> UpdateTransfer(int id, CreateTransferDto dto)
+    {
+        try
+        {
+            (RecordDto outgoing, RecordDto incoming) = await manager.UpdateTransferAsync(id, dto);
+            return Ok(new { Outgoing = outgoing, Incoming = incoming });
+        }
+        catch (KeyNotFoundException) { return NotFound(); }
+    }
+
     /// <summary>Updates an existing record.</summary>
     [HttpPut("{id:int}")]
     public async Task<ActionResult<RecordDto>> Update(int id, UpdateRecordDto dto)

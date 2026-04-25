@@ -17,6 +17,7 @@ public class RecordsManager(AppDbContext db)
             .Include(r => r.Store)
             .Include(r => r.RecordTags).ThenInclude(rt => rt.Tag)
             .Include(r => r.Attachments)
+            .Include(r => r.LinkedTransferRecord)
             .AsQueryable();
 
         if (filter.AccountId.HasValue)
@@ -63,6 +64,7 @@ public class RecordsManager(AppDbContext db)
             .Include(r => r.Store)
             .Include(r => r.RecordTags).ThenInclude(rt => rt.Tag)
             .Include(r => r.Attachments)
+            .Include(r => r.LinkedTransferRecord)
             .FirstOrDefaultAsync(r => r.Id == id)
             ?? throw new KeyNotFoundException($"Record {id} not found.");
 
@@ -77,6 +79,7 @@ public class RecordsManager(AppDbContext db)
             .Include(r => r.Store)
             .Include(r => r.RecordTags).ThenInclude(rt => rt.Tag)
             .Include(r => r.Attachments)
+            .Include(r => r.LinkedTransferRecord)
             .OrderByDescending(r => r.DateTime)
             .Take(count)
             .ToListAsync();
@@ -148,6 +151,45 @@ public class RecordsManager(AppDbContext db)
         return (await GetByIdAsync(outgoing.Id), await GetByIdAsync(incoming.Id));
     }
 
+    public async Task<(RecordDto Outgoing, RecordDto Incoming)> UpdateTransferAsync(int id, CreateTransferDto dto)
+    {
+        Record record = await db.Records
+            .Include(r => r.RecordTags)
+            .FirstOrDefaultAsync(r => r.Id == id)
+            ?? throw new KeyNotFoundException($"Record {id} not found.");
+
+        Record linked = await db.Records
+            .Include(r => r.RecordTags)
+            .FirstOrDefaultAsync(r => r.Id == record.LinkedTransferRecordId)
+            ?? throw new KeyNotFoundException($"Linked transfer record not found.");
+
+        Record outgoing = record.Amount < 0 ? record : linked;
+        Record incoming = record.Amount < 0 ? linked : record;
+
+        outgoing.AccountId  = dto.FromAccountId;
+        outgoing.CategoryId = dto.CategoryId;
+        outgoing.Amount     = -Math.Abs(dto.Amount);
+        outgoing.DateTime   = Utc(dto.DateTime);
+        outgoing.Notes      = dto.Notes;
+
+        incoming.AccountId  = dto.ToAccountId;
+        incoming.CategoryId = dto.CategoryId;
+        incoming.Amount     = Math.Abs(dto.Amount);
+        incoming.DateTime   = Utc(dto.DateTime);
+        incoming.Notes      = dto.Notes;
+
+        db.RecordTags.RemoveRange(outgoing.RecordTags);
+        db.RecordTags.RemoveRange(incoming.RecordTags);
+        foreach (int tagId in dto.TagIds)
+        {
+            db.RecordTags.Add(new RecordTag { RecordId = outgoing.Id, TagId = tagId });
+            db.RecordTags.Add(new RecordTag { RecordId = incoming.Id, TagId = tagId });
+        }
+
+        await db.SaveChangesAsync();
+        return (await GetByIdAsync(outgoing.Id), await GetByIdAsync(incoming.Id));
+    }
+
     public async Task<RecordDto> UpdateAsync(int id, UpdateRecordDto dto)
     {
         Record record = await db.Records
@@ -156,7 +198,7 @@ public class RecordsManager(AppDbContext db)
             ?? throw new KeyNotFoundException($"Record {id} not found.");
 
         record.AccountId = dto.AccountId;
-        record.CategoryId = dto.CategoryId;
+        record.CategoryId = dto.Type == RecordType.Transfer ? null : dto.CategoryId;
         record.StoreId = dto.StoreId;
         record.Type = dto.Type;
         record.Amount = dto.Type == RecordType.Expense ? -Math.Abs(dto.Amount) : Math.Abs(dto.Amount);
@@ -188,6 +230,10 @@ public class RecordsManager(AppDbContext db)
                 .FirstOrDefaultAsync(r => r.Id == record.LinkedTransferRecordId.Value)
                 ?? throw new KeyNotFoundException();
 
+            record.LinkedTransferRecordId = null;
+            linked.LinkedTransferRecordId = null;
+            await db.SaveChangesAsync();
+
             db.RecordTags.RemoveRange(linked.RecordTags);
             db.Attachments.RemoveRange(linked.Attachments);
             db.Records.Remove(linked);
@@ -211,7 +257,8 @@ public class RecordsManager(AppDbContext db)
         AccountId = r.AccountId,
         AccountName = r.Account?.Name ?? string.Empty,
         AccountCurrency = r.Account?.Currency ?? string.Empty,
-        CategoryId = r.CategoryId,
+        AccountColor = r.Account?.Color ?? string.Empty,
+        CategoryId = r.CategoryId ?? 0,
         CategoryName = r.Category?.Name ?? string.Empty,
         CategoryIcon = r.Category?.Icon ?? string.Empty,
         CategoryColor = r.Category?.Color ?? string.Empty,
@@ -224,6 +271,7 @@ public class RecordsManager(AppDbContext db)
         Latitude = r.Location?.Y,
         Longitude = r.Location?.X,
         LinkedTransferRecordId = r.LinkedTransferRecordId,
+        LinkedAccountId = r.LinkedTransferRecord?.AccountId,
         Tags = r.RecordTags?.Select(rt => new TagDto { Id = rt.Tag.Id, Name = rt.Tag.Name }).ToList() ?? [],
         Attachments = r.Attachments?.Select(a => new AttachmentDto
         {

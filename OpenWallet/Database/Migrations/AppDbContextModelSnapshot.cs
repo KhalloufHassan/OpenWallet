@@ -423,7 +423,7 @@ namespace OpenWallet.Database.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
 
-                    b.Property<int>("CategoryId")
+                    b.Property<int?>("CategoryId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("DateTime")
@@ -661,9 +661,7 @@ namespace OpenWallet.Database.Migrations
 
                     b.HasOne("OpenWallet.Database.Models.Category", "Category")
                         .WithMany("Records")
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("CategoryId");
 
                     b.HasOne("OpenWallet.Database.Models.Record", "LinkedTransferRecord")
                         .WithMany()

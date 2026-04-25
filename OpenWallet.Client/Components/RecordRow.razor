@@ -3,13 +3,20 @@
 
 <div class="record-row" @onclick="() => OnClick.InvokeAsync(Record)">
     <div class="record-category-circle flex-shrink-0" style="background:@CircleBg">
-        <i class="bi @Record.CategoryIcon" style="color:@Record.CategoryColor"></i>
+        @if (Record.Type == RecordType.Transfer)
+        {
+            <i class="bi bi-arrow-left-right" style="color:#79c0ff"></i>
+        }
+        else
+        {
+            <i class="bi @Record.CategoryIcon" style="color:@Record.CategoryColor"></i>
+        }
     </div>
 
     <div class="record-row-main">
-        <div class="record-row-name">@Record.CategoryName</div>
+        <div class="record-row-name">@(Record.Type == RecordType.Transfer ? "Transfer" : Record.CategoryName)</div>
         <div class="record-row-sub">
-            @Record.AccountName
+            <span style="color:@(string.IsNullOrEmpty(Record.AccountColor) ? "inherit" : Record.AccountColor)">@Record.AccountName</span>
             @if (!string.IsNullOrEmpty(Record.StoreName))
             {
                 <span class="mx-1 opacity-50">·</span>@Record.StoreName
@@ -50,6 +57,7 @@
     {
         get
         {
+            if (Record.Type == RecordType.Transfer) return "rgba(121,192,255,0.15)";
             string c = Record.CategoryColor;
             if (string.IsNullOrEmpty(c) || !c.StartsWith('#') || c.Length < 7) return "#21262d";
             try
@@ -65,9 +73,9 @@
 
     string AmountClass => Record.Type switch
     {
-        RecordType.Expense  => "amount-negative",
-        RecordType.Income   => "amount-positive",
-        _                   => "amount-transfer"
+        RecordType.Expense => "amount-negative",
+        RecordType.Income  => "amount-positive",
+        _                  => Record.Amount < 0 ? "amount-negative" : "amount-positive"
     };
 
     string FormattedAmount
@@ -78,7 +86,7 @@
             {
                 RecordType.Expense => "−",
                 RecordType.Income  => "+",
-                _                  => ""
+                _                  => Record.Amount < 0 ? "−" : "+"
             };
             return $"{sign}{Record.AccountCurrency} {Math.Abs(Record.Amount):N2}";
         }

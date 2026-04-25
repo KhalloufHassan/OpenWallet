@@ -8,6 +8,7 @@ public class RecordDto
     public int AccountId { get; set; }
     public string AccountName { get; set; } = string.Empty;
     public string AccountCurrency { get; set; } = string.Empty;
+    public string AccountColor { get; set; } = string.Empty;
     public int CategoryId { get; set; }
     public string CategoryName { get; set; } = string.Empty;
     public string CategoryIcon { get; set; } = string.Empty;
@@ -21,6 +22,7 @@ public class RecordDto
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public int? LinkedTransferRecordId { get; set; }
+    public int? LinkedAccountId { get; set; }
     public List<TagDto> Tags { get; set; } = [];
     public List<AttachmentDto> Attachments { get; set; } = [];
 }
@@ -43,7 +45,7 @@ public class CreateTransferDto
 {
     public int FromAccountId { get; set; }
     public int ToAccountId { get; set; }
-    public int CategoryId { get; set; }
+    public int? CategoryId { get; set; }
     public decimal Amount { get; set; }
     public DateTime DateTime { get; set; }
     public string Notes { get; set; } = string.Empty;
