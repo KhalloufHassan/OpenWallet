@@ -151,6 +151,42 @@ else
                 }
             </div>
         </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="widget-card h-100">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-key-fill text-secondary"></i>
+                    <h6 class="mb-0 fw-semibold">Change Password</h6>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small">Current Password</label>
+                    <input type="password" class="form-control" @bind="pwCurrent" autocomplete="current-password" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">New Password</label>
+                    <input type="password" class="form-control" @bind="pwNew" autocomplete="new-password" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Confirm New Password</label>
+                    <input type="password" class="form-control" @bind="pwConfirm" autocomplete="new-password" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(pwError))
+                {
+                    <div class="alert alert-danger py-1 small mb-2">@pwError</div>
+                }
+                @if (!string.IsNullOrEmpty(pwSuccess))
+                {
+                    <div class="alert alert-success py-1 small mb-2">@pwSuccess</div>
+                }
+
+                <button class="btn btn-sm btn-outline-primary" @onclick="ChangePassword" disabled="@busy">
+                    @if (busy) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                    Update Password
+                </button>
+            </div>
+        </div>
     </div>
 }
 
@@ -168,6 +204,11 @@ else
     string newPasskeyName = string.Empty;
     string passkeyError = string.Empty;
     string passkeySuccess = string.Empty;
+    string pwCurrent = string.Empty;
+    string pwNew = string.Empty;
+    string pwConfirm = string.Empty;
+    string pwError = string.Empty;
+    string pwSuccess = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -191,7 +232,10 @@ else
             {
                 await JS.InvokeVoidAsync("owAuth.renderQrCode", "totp-qr", totpSetup.QrCodeUri);
             }
-            catch { }
+            catch
+            {
+                // ignored
+            }
         }
     }
 
@@ -299,6 +343,40 @@ else
         else
         {
             passkeyError = "Failed to delete passkey.";
+        }
+    }
+
+    async Task ChangePassword()
+    {
+        pwError = string.Empty;
+        pwSuccess = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(pwCurrent) || string.IsNullOrWhiteSpace(pwNew))
+        { pwError = "All fields are required."; return; }
+
+        if (pwNew.Length < 12)
+        { pwError = "New password must be at least 12 characters."; return; }
+
+        if (!pwNew.Any(char.IsDigit) || !pwNew.Any(char.IsLower))
+        { pwError = "New password must contain at least one digit and one lowercase letter."; return; }
+
+        if (pwNew != pwConfirm)
+        { pwError = "Passwords do not match."; return; }
+
+        busy = true;
+        bool ok = await Api.ChangePasswordAsync(new ChangePasswordDto { CurrentPassword = pwCurrent, NewPassword = pwNew });
+        busy = false;
+
+        if (ok)
+        {
+            pwSuccess = "Password updated successfully.";
+            pwCurrent = string.Empty;
+            pwNew = string.Empty;
+            pwConfirm = string.Empty;
+        }
+        else
+        {
+            pwError = "Current password is incorrect.";
         }
     }
 }
