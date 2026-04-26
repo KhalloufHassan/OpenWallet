@@ -346,7 +346,7 @@
                 string typeStr   = SafeCol(idxType);
                 string note      = SafeCol(idxNote);
                 string dateStr   = SafeCol(idxDate);
-                bool transfer    = SafeCol(idxTransfer).Equals("true", StringComparison.OrdinalIgnoreCase);
+                bool transfer    = IsTruthy(SafeCol(idxTransfer));
                 string labelsStr = SafeCol(idxLabels);
                 string store     = SafeCol(idxStore);
 
@@ -456,7 +456,9 @@
         importedCount = 0;
         sql = string.Empty;
 
-        IEnumerable<CsvRow> validRows = rows.Where(r => !r.HasError && accountMap.TryGetValue(r.Account, out int aid) && aid != 0);
+        IEnumerable<CsvRow> validRows = rows.Where(r =>
+            !r.HasError &&
+            accountMap.TryGetValue(r.Account, out int aid) && aid != 0);
         List<CsvRow> importable = (reverseOrder ? validRows.Reverse() : validRows).ToList();
 
         importTotal = importable.Count;
@@ -469,9 +471,14 @@
 
             RecordType type;
             if (row.Transfer)
-                type = RecordType.Expense;
+            {
+                bool incoming = IsIncomeType(row.Type);
+                type = transferMode == TransferMode.AsTransfer
+                    ? RecordType.Transfer
+                    : incoming ? RecordType.Income : RecordType.Expense;
+            }
             else
-                type = row.Type.Equals("Income", StringComparison.OrdinalIgnoreCase) ? RecordType.Income : RecordType.Expense;
+                type = ResolveType(row.Type, row.Amount);
 
             List<int> tagIds = row.Labels
                 .Select(l => labelMap.TryGetValue(l, out int tid) ? tid : 0)
@@ -480,13 +487,17 @@
 
             int? storeId = !string.IsNullOrEmpty(row.Store) && storeMap.TryGetValue(row.Store, out int? smid) ? smid : null;
 
+            decimal dtoAmount = (row.Transfer && type == RecordType.Transfer)
+                ? (IsIncomeType(row.Type) ? Math.Abs(row.Amount) : -Math.Abs(row.Amount))
+                : Math.Abs(row.Amount);
+
             CreateRecordDto dto = new()
             {
                 AccountId  = accountId,
                 CategoryId = categoryId ?? 0,
                 StoreId    = storeId,
                 Type       = type,
-                Amount     = Math.Abs(row.Amount),
+                Amount     = dtoAmount,
                 DateTime   = row.Date,
                 Notes      = row.Note,
                 TagIds     = tagIds
@@ -536,12 +547,21 @@
 
             if (row.Transfer)
             {
-                type   = transferMode == TransferMode.AsTransfer ? RecordType.Transfer : RecordType.Expense;
-                amount = -Math.Abs(row.Amount);
+                bool incoming = IsIncomeType(row.Type);
+                if (transferMode == TransferMode.AsTransfer)
+                {
+                    type   = RecordType.Transfer;
+                    amount = incoming ? Math.Abs(row.Amount) : -Math.Abs(row.Amount);
+                }
+                else
+                {
+                    type   = incoming ? RecordType.Income : RecordType.Expense;
+                    amount = incoming ? Math.Abs(row.Amount) : -Math.Abs(row.Amount);
+                }
             }
             else
             {
-                type   = row.Type.Equals("Income", StringComparison.OrdinalIgnoreCase) ? RecordType.Income : RecordType.Expense;
+                type   = ResolveType(row.Type, row.Amount);
                 amount = type == RecordType.Income ? Math.Abs(row.Amount) : -Math.Abs(row.Amount);
             }
 
@@ -587,5 +607,21 @@
             sb.AppendLine($"-- {transferCount} transfer row(s) imported as {(transferMode == TransferMode.AsExpense ? "Expense" : "Transfer (unlinked)")}");
 
         sql = sb.ToString();
+    }
+
+    static bool IsTruthy(string value) =>
+        value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+        value == "1" ||
+        value.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("y", StringComparison.OrdinalIgnoreCase);
+
+    static bool IsIncomeType(string typeStr) =>
+        typeStr.Equals("Income", StringComparison.OrdinalIgnoreCase);
+
+    static RecordType ResolveType(string typeStr, decimal amount)
+    {
+        if (typeStr.Equals("Income", StringComparison.OrdinalIgnoreCase)) return RecordType.Income;
+        if (typeStr.Equals("Expense", StringComparison.OrdinalIgnoreCase)) return RecordType.Expense;
+        return amount > 0 ? RecordType.Income : RecordType.Expense;
     }
 }

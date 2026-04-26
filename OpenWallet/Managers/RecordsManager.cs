@@ -95,7 +95,9 @@ public class RecordsManager(AppDbContext db)
             CategoryId = dto.CategoryId == 0 ? null : dto.CategoryId,
             StoreId = dto.StoreId,
             Type = dto.Type,
-            Amount = dto.Type == RecordType.Expense ? -Math.Abs(dto.Amount) : Math.Abs(dto.Amount),
+            Amount = dto.Type == RecordType.Expense ? -Math.Abs(dto.Amount)
+                   : dto.Type == RecordType.Transfer ? dto.Amount
+                   : Math.Abs(dto.Amount),
             DateTime = Utc(dto.DateTime),
             Notes = dto.Notes,
             Location = ToPoint(dto.Latitude, dto.Longitude)
@@ -201,7 +203,9 @@ public class RecordsManager(AppDbContext db)
         record.CategoryId = dto.Type == RecordType.Transfer ? null : dto.CategoryId;
         record.StoreId = dto.StoreId;
         record.Type = dto.Type;
-        record.Amount = dto.Type == RecordType.Expense ? -Math.Abs(dto.Amount) : Math.Abs(dto.Amount);
+        record.Amount = dto.Type == RecordType.Expense ? -Math.Abs(dto.Amount)
+                      : dto.Type == RecordType.Transfer ? dto.Amount
+                      : Math.Abs(dto.Amount);
         record.DateTime = Utc(dto.DateTime);
         record.Notes = dto.Notes;
         record.Location = ToPoint(dto.Latitude, dto.Longitude);

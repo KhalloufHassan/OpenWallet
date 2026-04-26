@@ -154,9 +154,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         Privacy.OnChanged += OnPrivacyChanged;
-        var loadCats = Api.GetCategoriesAsync();
-        var loadAccounts = Api.GetAccountsAsync();
-        var loadStores = Api.GetStoresAsync();
+        Task<List<CategoryDto>> loadCats = Api.GetCategoriesAsync();
+        Task<List<AccountDto>> loadAccounts = Api.GetAccountsAsync();
+        Task<List<StoreDto>> loadStores = Api.GetStoresAsync();
         Task<List<TagDto>> loadTags = Api.GetTagsAsync();
         await LoadData();
         categories = await loadCats;

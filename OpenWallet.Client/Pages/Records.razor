@@ -82,14 +82,14 @@ else
                             <div class="col-md-6">
                                 <label class="form-label">From Account</label>
                                 <AccountPicker Accounts="accounts"
-                                              Value="@(transferDto.FromAccountId == 0 ? null : (int?)transferDto.FromAccountId)"
+                                              Value="@(transferDto.FromAccountId == 0 ? null : transferDto.FromAccountId)"
                                               ValueChanged="id => transferDto.FromAccountId = id ?? 0"
                                               FullCover="true" Placeholder="Select account…" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">To Account</label>
                                 <AccountPicker Accounts="accounts"
-                                              Value="@(transferDto.ToAccountId == 0 ? null : (int?)transferDto.ToAccountId)"
+                                              Value="@(transferDto.ToAccountId == 0 ? null : transferDto.ToAccountId)"
                                               ValueChanged="id => transferDto.ToAccountId = id ?? 0"
                                               FullCover="true" Placeholder="Select account…" />
                             </div>
@@ -142,7 +142,7 @@ else
                             <div class="rf-row">
                                 <div class="rf-label">Account</div>
                                 <AccountPicker Accounts="accounts"
-                                              Value="@(recordForm.AccountId == 0 ? null : (int?)recordForm.AccountId)"
+                                              Value="@(recordForm.AccountId == 0 ? null : recordForm.AccountId)"
                                               ValueChanged="id => recordForm.AccountId = id ?? 0"
                                               FullCover="true" Placeholder="Select account…" />
                             </div>
