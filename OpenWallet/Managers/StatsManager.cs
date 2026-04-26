@@ -23,7 +23,7 @@ public class StatsManager(AppDbContext db, AccountsManager accountsManager, Reco
 
         List<CategoryExpenseDto> expensesByCategory = await GetExpensesByCategoryAsync(start, end);
         List<TagExpenseDto> expensesByTag = await GetExpensesByTagAsync(start, end);
-        List<BalanceTrendDto> balanceTrend = await GetBalanceTrendAsync();
+        List<BalanceTrendDto> balanceTrend = await GetBalanceTrendAsync(start, end);
 
         return new DashboardDto
         {
@@ -86,15 +86,16 @@ public class StatsManager(AppDbContext db, AccountsManager accountsManager, Reco
             .ToList();
     }
 
-    public async Task<List<BalanceTrendDto>> GetBalanceTrendAsync(int days = 30)
+    public async Task<List<BalanceTrendDto>> GetBalanceTrendAsync(DateTime from, DateTime to)
     {
-        DateTime start = DateTime.SpecifyKind(DateTime.UtcNow.Date.AddDays(-days), DateTimeKind.Utc);
+        DateTime start = DateTime.SpecifyKind(from.Date, DateTimeKind.Utc);
+        DateTime end   = DateTime.SpecifyKind(to.Date,   DateTimeKind.Utc);
 
         List<Account> accounts = await db.Accounts.ToListAsync();
         decimal baseBalance = accounts.Sum(a => a.InitialAmount);
 
         List<Record> records = await db.Records
-            .Where(r => r.DateTime >= start)
+            .Where(r => r.DateTime >= start && r.DateTime < end.AddDays(1))
             .OrderBy(r => r.DateTime)
             .ToListAsync();
 
@@ -103,6 +104,7 @@ public class StatsManager(AppDbContext db, AccountsManager accountsManager, Reco
             .SumAsync(r => r.Amount);
 
         List<BalanceTrendDto> trend = [];
+        int days = (int)(end - start).TotalDays;
 
         for (int i = 0; i <= days; i++)
         {

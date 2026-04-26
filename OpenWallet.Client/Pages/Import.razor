@@ -95,6 +95,28 @@
         </div>
     }
 
+    @if (storeMap.Count > 0)
+    {
+        <div class="widget-card mb-3">
+            <div class="rf-section-label">Store Mappings</div>
+            <div class="small text-muted mb-3">Map each CSV store/payee name to a store in OpenWallet. Unmapped entries import without a store.</div>
+            @foreach (string csvName in storeMap.Keys.OrderBy(k => k).ToList())
+            {
+                string key = csvName;
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <code class="small flex-shrink-0" style="min-width:160px;">@key</code>
+                    <i class="bi bi-arrow-right text-muted flex-shrink-0"></i>
+                    <div class="flex-grow-1">
+                        <StorePicker Stores="stores"
+                                     Value="storeMap[key]"
+                                     ValueChanged="id => storeMap[key] = id"
+                                     Nullable="true" NullLabel="— no store —" />
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
     @if (transferCount > 0)
     {
         <div class="widget-card mb-3">
@@ -115,6 +137,10 @@
             int validCount = rows.Count(r => !r.HasError);
             int errorCount = rows.Count(r => r.HasError);
         }
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="reverseOrder" @bind="reverseOrder" />
+            <label class="form-check-label small" for="reverseOrder">Reverse order (import last row first)</label>
+        </div>
         <div class="small text-muted mb-3">
             @rows.Count total rows &nbsp;·&nbsp;
             <span class="text-success">@validCount parseable</span>
@@ -218,12 +244,14 @@
         DateTime Date,
         bool Transfer,
         List<string> Labels,
+        string Store,
         bool HasError = false,
         string ErrorMessage = "");
 
     List<AccountDto> accounts = [];
     List<CategoryDto> categories = [];
     List<TagDto> allTags = [];
+    List<StoreDto> stores = [];
 
     string csvText = string.Empty;
     string parseError = string.Empty;
@@ -233,8 +261,10 @@
     Dictionary<string, int> accountMap = new();
     Dictionary<string, int?> categoryMap = new();
     Dictionary<string, int> labelMap = new();
+    Dictionary<string, int?> storeMap = new();
     TransferMode transferMode = TransferMode.AsExpense;
 
+    bool reverseOrder;
     bool importing;
     bool importDone;
     int importProgress;
@@ -249,10 +279,12 @@
         Task<List<AccountDto>> aTask = Api.GetAccountsAsync();
         Task<List<CategoryDto>> cTask = Api.GetCategoriesAsync();
         Task<List<TagDto>> tTask = Api.GetTagsAsync();
-        await Task.WhenAll(aTask, cTask, tTask);
+        Task<List<StoreDto>> sTask = Api.GetStoresAsync();
+        await Task.WhenAll(aTask, cTask, tTask, sTask);
         accounts = aTask.Result;
         categories = cTask.Result;
         allTags = tTask.Result;
+        stores = sTask.Result;
     }
 
     async Task OnFileSelected(InputFileChangeEventArgs e)
@@ -268,6 +300,7 @@
         accountMap = new();
         categoryMap = new();
         labelMap = new();
+        storeMap = new();
         sql = string.Empty;
         parsed = false;
 
@@ -292,6 +325,7 @@
         int idxDate     = Idx("date");
         int idxTransfer = Idx("transfer");
         int idxLabels   = Idx("labels");
+        int idxStore    = Idx("store"); if (idxStore < 0) idxStore = Idx("payee");
 
         if (idxAccount < 0 || idxAmount < 0 || idxType < 0 || idxDate < 0)
         {
@@ -314,6 +348,7 @@
                 string dateStr   = SafeCol(idxDate);
                 bool transfer    = SafeCol(idxTransfer).Equals("true", StringComparison.OrdinalIgnoreCase);
                 string labelsStr = SafeCol(idxLabels);
+                string store     = SafeCol(idxStore);
 
                 if (!decimal.TryParse(amountStr, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal amount))
                     throw new FormatException($"Invalid amount: {amountStr}");
@@ -327,7 +362,7 @@
                           .Select(l => l.Trim())
                           .Where(l => l.Length > 0)];
 
-                rows.Add(new CsvRow(account, category, amount, typeStr, note, date, transfer, labels));
+                rows.Add(new CsvRow(account, category, amount, typeStr, note, date, transfer, labels, store));
 
                 if (!string.IsNullOrWhiteSpace(account) && !accountMap.ContainsKey(account))
                     accountMap[account] = 0;
@@ -335,11 +370,13 @@
                     categoryMap[category] = null;
                 foreach (string label in labels.Where(l => !labelMap.ContainsKey(l)))
                     labelMap[label] = 0;
+                if (!string.IsNullOrWhiteSpace(store) && !storeMap.ContainsKey(store))
+                    storeMap[store] = null;
             }
             catch (Exception ex)
             {
                 rows.Add(new CsvRow(string.Empty, string.Empty, 0, string.Empty, string.Empty,
-                    DateTime.UtcNow, false, [], true, $"Row {i + 1}: {ex.Message}"));
+                    DateTime.UtcNow, false, [], string.Empty, true, $"Row {i + 1}: {ex.Message}"));
             }
         }
 
@@ -419,9 +456,8 @@
         importedCount = 0;
         sql = string.Empty;
 
-        List<CsvRow> importable = rows
-            .Where(r => !r.HasError && accountMap.TryGetValue(r.Account, out int aid) && aid != 0)
-            .ToList();
+        IEnumerable<CsvRow> validRows = rows.Where(r => !r.HasError && accountMap.TryGetValue(r.Account, out int aid) && aid != 0);
+        List<CsvRow> importable = (reverseOrder ? validRows.Reverse() : validRows).ToList();
 
         importTotal = importable.Count;
         importProgress = 0;
@@ -442,10 +478,13 @@
                 .Where(tid => tid > 0)
                 .ToList();
 
+            int? storeId = !string.IsNullOrEmpty(row.Store) && storeMap.TryGetValue(row.Store, out int? smid) ? smid : null;
+
             CreateRecordDto dto = new()
             {
                 AccountId  = accountId,
                 CategoryId = categoryId ?? 0,
+                StoreId    = storeId,
                 Type       = type,
                 Amount     = Math.Abs(row.Amount),
                 DateTime   = row.Date,
@@ -480,7 +519,9 @@
         sb.AppendLine("BEGIN;");
         sb.AppendLine();
 
-        foreach (CsvRow row in rows.Where(r => !r.HasError))
+        IEnumerable<CsvRow> orderedRows = rows.Where(r => !r.HasError);
+        if (reverseOrder) orderedRows = orderedRows.Reverse();
+        foreach (CsvRow row in orderedRows)
         {
             if (!accountMap.TryGetValue(row.Account, out int accountId) || accountId == 0)
             {
@@ -509,17 +550,21 @@
                 .Where(tid => tid > 0)
                 .ToList();
 
+            int? storeId = !string.IsNullOrEmpty(row.Store) && storeMap.TryGetValue(row.Store, out int? smid) ? smid : null;
+
             string catSql    = categoryId.HasValue ? categoryId.Value.ToString() : "NULL";
             string noteSql   = row.Note.Replace("'", "''");
             string dateSql   = row.Date.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
             string amountSql = amount.ToString("F4", CultureInfo.InvariantCulture);
             int    typeInt   = (int)type;
+            string storeSql  = storeId.HasValue ? $", \"StoreId\"" : string.Empty;
+            string storeVal  = storeId.HasValue ? $", {storeId.Value}" : string.Empty;
 
             if (tagIds.Count > 0)
             {
                 sb.AppendLine("WITH _r AS (");
-                sb.AppendLine($"  INSERT INTO \"Records\" (\"AccountId\", \"CategoryId\", \"Type\", \"Amount\", \"DateTime\", \"Notes\")");
-                sb.AppendLine($"  VALUES ({accountId}, {catSql}, {typeInt}, {amountSql}, '{dateSql}', '{noteSql}')");
+                sb.AppendLine($"  INSERT INTO \"Records\" (\"AccountId\", \"CategoryId\", \"Type\", \"Amount\", \"DateTime\", \"Notes\"{storeSql})");
+                sb.AppendLine($"  VALUES ({accountId}, {catSql}, {typeInt}, {amountSql}, '{dateSql}', '{noteSql}'{storeVal})");
                 sb.AppendLine("  RETURNING \"Id\"");
                 sb.AppendLine(")");
                 sb.AppendLine($"INSERT INTO \"RecordTags\" (\"RecordId\", \"TagId\")");
@@ -527,8 +572,8 @@
             }
             else
             {
-                sb.AppendLine($"INSERT INTO \"Records\" (\"AccountId\", \"CategoryId\", \"Type\", \"Amount\", \"DateTime\", \"Notes\")");
-                sb.AppendLine($"VALUES ({accountId}, {catSql}, {typeInt}, {amountSql}, '{dateSql}', '{noteSql}');");
+                sb.AppendLine($"INSERT INTO \"Records\" (\"AccountId\", \"CategoryId\", \"Type\", \"Amount\", \"DateTime\", \"Notes\"{storeSql})");
+                sb.AppendLine($"VALUES ({accountId}, {catSql}, {typeInt}, {amountSql}, '{dateSql}', '{noteSql}'{storeVal});");
             }
 
             sb.AppendLine();

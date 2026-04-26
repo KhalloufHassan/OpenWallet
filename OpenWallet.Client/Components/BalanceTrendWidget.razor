@@ -1,0 +1,25 @@
+@using OpenWallet.Shared.DTOs
+@inject IJSRuntime JS
+
+<div class="widget-card">
+    <h6 class="mb-3 fw-semibold">Balance Trend</h6>
+    <canvas id="trendChart" height="100"></canvas>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<BalanceTrendDto> BalanceTrend { get; set; } = [];
+
+    bool chartDirty = true;
+
+    protected override void OnParametersSet() => chartDirty = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!chartDirty) return;
+        chartDirty = false;
+
+        List<string> labels = BalanceTrend.Select(t => t.Date.ToString("MMM dd")).ToList();
+        List<decimal> data = BalanceTrend.Select(t => t.Balance).ToList();
+        await JS.InvokeVoidAsync("renderLineChart", "trendChart", labels, data);
+    }
+}

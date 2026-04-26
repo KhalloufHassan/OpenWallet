@@ -31,6 +31,7 @@
                            Accounts="accounts"
                            Categories="categories"
                            Stores="stores"
+                           Tags="allTags"
                            OnSearch="ApplyFilter"
                            OnReset="ResetFilter" />
     </div>
@@ -51,16 +52,9 @@ else
         {
             <RecordRow Record="r" OnClick="OnRecordClick" />
         }
-        <div class="d-flex align-items-center justify-content-between mt-3">
-            <small class="text-muted">@total records total</small>
-            <div class="d-flex gap-1">
-                <button class="btn btn-sm btn-outline-secondary" disabled="@(filter.Page <= 1)"
-                        @onclick="PrevPage"><i class="bi bi-chevron-left"></i></button>
-                <span class="btn btn-sm disabled">Page @filter.Page of @TotalPages</span>
-                <button class="btn btn-sm btn-outline-secondary" disabled="@(filter.Page >= TotalPages)"
-                        @onclick="NextPage"><i class="bi bi-chevron-right"></i></button>
-            </div>
-        </div>
+        <PaginationBar Page="filter.Page" PageChanged="SetPage"
+                       PageSize="filter.PageSize" PageSizeChanged="SetPageSize"
+                       Total="total" />
     </div>
 }
 
@@ -73,7 +67,13 @@ else
                     <h5 class="modal-title">
                         @(isTransfer ? (editingId == null ? "New Transfer" : "Edit Transfer") : (editingId == null ? "New Record" : "Edit Record"))
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                    <div class="d-flex align-items-center gap-2 ms-auto">
+                        @if (editingId == null && !isTransfer)
+                        {
+                            <TemplatePicker Templates="templates" OnSelect="ApplyTemplate" FullCover="true" />
+                        }
+                        <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                    </div>
                 </div>
                 <div class="modal-body" style="position: relative">
                     @if (isTransfer)
@@ -81,23 +81,17 @@ else
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label">From Account</label>
-                                <select class="form-select" @bind="transferDto.FromAccountId">
-                                    <option value="0">Select account...</option>
-                                    @foreach (AccountDto a in accounts)
-                                    {
-                                        <option value="@a.Id">@a.Name (@a.Currency)</option>
-                                    }
-                                </select>
+                                <AccountPicker Accounts="accounts"
+                                              Value="@(transferDto.FromAccountId == 0 ? null : (int?)transferDto.FromAccountId)"
+                                              ValueChanged="id => transferDto.FromAccountId = id ?? 0"
+                                              FullCover="true" Placeholder="Select account…" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">To Account</label>
-                                <select class="form-select" @bind="transferDto.ToAccountId">
-                                    <option value="0">Select account...</option>
-                                    @foreach (AccountDto a in accounts)
-                                    {
-                                        <option value="@a.Id">@a.Name (@a.Currency)</option>
-                                    }
-                                </select>
+                                <AccountPicker Accounts="accounts"
+                                              Value="@(transferDto.ToAccountId == 0 ? null : (int?)transferDto.ToAccountId)"
+                                              ValueChanged="id => transferDto.ToAccountId = id ?? 0"
+                                              FullCover="true" Placeholder="Select account…" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Amount</label>
@@ -117,14 +111,9 @@ else
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Tags</label>
-                                <div class="d-flex flex-wrap gap-1">
-                                    @foreach (TagDto t in allTags)
-                                    {
-                                        bool sel = transferDto.TagIds.Contains(t.Id);
-                                        <span class="tag-badge @(sel ? "border-primary text-white" : "")" style="cursor:pointer"
-                                              @onclick="() => ToggleTag(t.Id, transferDto.TagIds)">@t.Name</span>
-                                    }
-                                </div>
+                                <TagsPicker Tags="allTags" SelectedIds="transferDto.TagIds"
+                                            SelectedIdsChanged="ids => transferDto.TagIds = ids"
+                                            FullCover="true" />
                             </div>
                             <div class="col-12">
                                 <label class="form-label">Notes</label>
@@ -152,13 +141,10 @@ else
                             <div class="rf-section-label">General</div>
                             <div class="rf-row">
                                 <div class="rf-label">Account</div>
-                                <select class="form-select" @bind="recordForm.AccountId">
-                                    <option value="0">Select account...</option>
-                                    @foreach (AccountDto a in accounts)
-                                    {
-                                        <option value="@a.Id">@a.Name (@a.Currency)</option>
-                                    }
-                                </select>
+                                <AccountPicker Accounts="accounts"
+                                              Value="@(recordForm.AccountId == 0 ? null : (int?)recordForm.AccountId)"
+                                              ValueChanged="id => recordForm.AccountId = id ?? 0"
+                                              FullCover="true" Placeholder="Select account…" />
                             </div>
                             <div class="rf-row">
                                 <div class="rf-label">Category</div>
@@ -174,25 +160,15 @@ else
                             </div>
                             <div class="rf-row">
                                 <div class="rf-label">Tags</div>
-                                <div class="d-flex flex-wrap gap-1 pt-1">
-                                    @foreach (TagDto t in allTags)
-                                    {
-                                        bool sel = recordForm.TagIds.Contains(t.Id);
-                                        <span class="tag-badge @(sel ? "border-primary text-white" : "")"
-                                              style="cursor:pointer"
-                                              @onclick="() => ToggleTag(t.Id, recordForm.TagIds)">@t.Name</span>
-                                    }
-                                </div>
+                                <TagsPicker Tags="allTags" SelectedIds="recordForm.TagIds"
+                                            SelectedIdsChanged="ids => recordForm.TagIds = ids"
+                                            FullCover="true" />
                             </div>
                             <div class="rf-row">
                                 <div class="rf-label">Store <span class="text-muted" style="font-size:0.7rem">(optional)</span></div>
-                                <select class="form-select" @bind="recordForm.StoreId">
-                                    <option value="">No store</option>
-                                    @foreach (StoreDto s in stores)
-                                    {
-                                        <option value="@s.Id">@s.Name</option>
-                                    }
-                                </select>
+                                <StorePicker Stores="stores" Value="recordForm.StoreId"
+                                             ValueChanged="id => recordForm.StoreId = id"
+                                             FullCover="true" Nullable="true" />
                             </div>
                         </div>
 
@@ -365,6 +341,7 @@ else
         .ToList();
     List<TagDto> allTags = [];
     List<StoreDto> stores = [];
+    List<TemplateDto> templates = [];
     int total;
     bool loading = true;
     bool showModal;
@@ -392,7 +369,6 @@ else
     decimal recordAmount;
     CreateTransferDto transferDto = new() { DateTime = DateTime.Now };
 
-    int TotalPages => (int)Math.Ceiling((double)total / filter.PageSize);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -459,10 +435,12 @@ else
         var c = Api.GetCategoriesAsync();
         var t = Api.GetTagsAsync();
         var s = Api.GetStoresAsync();
+        Task<List<TemplateDto>> tpl = Api.GetTemplatesAsync();
         accounts = await a;
         categories = await c;
         allTags = await t;
         stores = await s;
+        templates = await tpl;
     }
 
     async Task ApplyFilter()
@@ -486,8 +464,22 @@ else
         await ApplyFilter();
     }
 
-    async Task PrevPage() { filter.Page--; await ApplyFilter(); }
-    async Task NextPage() { filter.Page++; await ApplyFilter(); }
+    async Task SetPage(int page)
+    {
+        filter.Page = page;
+        loading = true;
+        await LoadRecords();
+        loading = false;
+    }
+
+    async Task SetPageSize(int size)
+    {
+        filter.PageSize = size;
+        filter.Page = 1;
+        loading = true;
+        await LoadRecords();
+        loading = false;
+    }
 
     async Task OpenModal(RecordDto? record, bool transfer)
     {
@@ -640,12 +632,6 @@ else
         catch (Exception ex) { error = ex.Message; deleteTarget = null; }
     }
 
-    static void ToggleTag(int tagId, List<int> tagIds)
-    {
-        if (tagIds.Contains(tagId)) tagIds.Remove(tagId);
-        else tagIds.Add(tagId);
-    }
-
     void OnFilesSelected(InputFileChangeEventArgs e) =>
         pendingUploads.AddRange(e.GetMultipleFiles(20));
 
@@ -680,6 +666,16 @@ else
         recordForm.Longitude = null;
         locationError = string.Empty;
         mapNeedsRender = false;
+    }
+
+    void ApplyTemplate(TemplateDto template)
+    {
+        recordForm.AccountId = template.AccountId;
+        recordForm.CategoryId = template.CategoryId;
+        recordForm.Type = template.Type;
+        recordAmount = Math.Abs(template.Amount);
+        recordForm.Notes = template.Notes;
+        recordForm.TagIds = template.Tags.Select(t => t.Id).ToList();
     }
 
     static string FormatFileSize(long bytes) =>

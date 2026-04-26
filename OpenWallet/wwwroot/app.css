@@ -432,6 +432,7 @@ html, body {
     position: relative;
 }
 
+.calc-panel:focus { outline: none; }
 .calc-panel {
     position: absolute;
     top: calc(100% + 4px);
@@ -668,6 +669,75 @@ html, body {
     font-size: 0.75rem;
     color: #8b949e;
     margin-bottom: 0.25rem;
+}
+
+.tpl-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.625rem 1rem;
+    background: none;
+    border: none;
+    border-bottom: 1px solid #21262d;
+    color: #e6edf3;
+    cursor: pointer;
+    text-align: left;
+    gap: 0.75rem;
+}
+.tpl-row:hover { background-color: #1c2129; }
+.tpl-row:last-child { border-bottom: none; }
+.tpl-row-info { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.tpl-row-name { font-size: 0.875rem; font-weight: 500; }
+.tpl-row-cat { font-size: 0.75rem; color: #8b949e; }
+.tpl-row-amount { font-size: 0.875rem; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.tpl-amount-expense { color: #f85149; }
+.tpl-amount-income  { color: #3fb950; }
+
+.picker-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0.625rem 1rem;
+    background: none;
+    border: none;
+    border-bottom: 1px solid #21262d;
+    color: #e6edf3;
+    cursor: pointer;
+    text-align: left;
+    gap: 0.625rem;
+}
+.picker-row:hover { background-color: #1c2129; }
+.picker-row:last-child { border-bottom: none; }
+.picker-row-active { background-color: #1c2129; }
+
+.acct-balance-item {
+    flex: 1 1 180px;
+    padding: 0.625rem 0.875rem;
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+}
+.acct-balance-total {
+    border-color: #388bfd;
+}
+
+.pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #21262d;
+    margin-top: 0.75rem;
+}
+.pagination-page-input {
+    width: 60px;
+    text-align: center;
+}
+.pagination-size-select {
+    width: auto;
 }
 
 

@@ -1,0 +1,31 @@
+@using OpenWallet.Shared.DTOs
+
+<div class="widget-card">
+    <h6 class="mb-3 fw-semibold">Accounts</h6>
+    <div class="d-flex flex-wrap gap-3">
+        @foreach (AccountDto account in Dashboard.Accounts)
+        {
+            <div class="acct-balance-item">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="account-color-dot" style="background-color: @account.Color"></span>
+                    <span class="fw-semibold small text-truncate">@account.Name</span>
+                    <span class="badge bg-secondary text-white ms-auto" style="font-size:0.65rem">@account.Currency</span>
+                </div>
+                <div class="fs-5 fw-bold @(IsMasked ? "masked" : "")">
+                    @account.Currency @Math.Abs(account.CurrentBalance).ToString("N2")
+                </div>
+            </div>
+        }
+        <div class="acct-balance-item acct-balance-total">
+            <div class="text-muted small mb-1">Total Balance</div>
+            <div class="fs-4 fw-bold text-primary @(IsMasked ? "masked" : "")">
+                @(IsMasked ? "•••••" : Dashboard.TotalBalance.ToString("N2"))
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DashboardDto Dashboard { get; set; } = new();
+    [Parameter] public bool IsMasked { get; set; }
+}

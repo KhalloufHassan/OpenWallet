@@ -1,0 +1,29 @@
+@using OpenWallet.Shared.DTOs
+
+<div class="widget-card">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="mb-0 fw-semibold">Recent Records</h6>
+        <div class="d-flex gap-2">
+            <a href="records?add=true" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-lg me-1"></i>Add
+            </a>
+            <a href="records" class="btn btn-sm btn-outline-secondary">View all</a>
+        </div>
+    </div>
+    @if (!Records.Any())
+    {
+        <p class="text-muted small mb-0">No records yet.</p>
+    }
+    else
+    {
+        @foreach (RecordDto r in Records)
+        {
+            <RecordRow Record="r" OnClick="OnRecordClick" />
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<RecordDto> Records { get; set; } = [];
+    [Parameter] public EventCallback<RecordDto> OnRecordClick { get; set; }
+}

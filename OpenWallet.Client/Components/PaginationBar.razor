@@ -1,0 +1,77 @@
+<div class="pagination-bar">
+    <small class="text-muted">
+        @if (Total == 0)
+        {
+            <span>No items</span>
+        }
+        else
+        {
+            <span>@ItemsFrom–@ItemsTo of @Total</span>
+        }
+    </small>
+
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="d-flex align-items-center gap-1">
+            <button class="btn btn-sm btn-outline-secondary" title="First page"
+                    disabled="@(Page <= 1)" @onclick="@(() => GoTo(1))">
+                <i class="bi bi-chevron-double-left"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" title="Previous page"
+                    disabled="@(Page <= 1)" @onclick="@(() => GoTo(Page - 1))">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+            <input type="number" class="form-control form-control-sm pagination-page-input"
+                   min="1" max="@TotalPages" value="@Page"
+                   @onchange="OnPageInputChange" />
+            <span class="text-muted small text-nowrap">of @TotalPages</span>
+            <button class="btn btn-sm btn-outline-secondary" title="Next page"
+                    disabled="@(Page >= TotalPages)" @onclick="@(() => GoTo(Page + 1))">
+                <i class="bi bi-chevron-right"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" title="Last page"
+                    disabled="@(Page >= TotalPages)" @onclick="@(() => GoTo(TotalPages))">
+                <i class="bi bi-chevron-double-right"></i>
+            </button>
+        </div>
+
+        <select class="form-select form-select-sm pagination-size-select"
+                value="@PageSize" @onchange="OnPageSizeChange">
+            @foreach (int size in PageSizeOptions)
+            {
+                <option value="@size">@size / page</option>
+            }
+        </select>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int Page { get; set; }
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+    [Parameter, EditorRequired] public int PageSize { get; set; }
+    [Parameter] public EventCallback<int> PageSizeChanged { get; set; }
+    [Parameter, EditorRequired] public int Total { get; set; }
+    [Parameter] public int[] PageSizeOptions { get; set; } = [25, 50, 100, 200];
+
+    int TotalPages => Total == 0 ? 1 : (int)Math.Ceiling((double)Total / PageSize);
+    int ItemsFrom => Total == 0 ? 0 : (Page - 1) * PageSize + 1;
+    int ItemsTo => Math.Min(Page * PageSize, Total);
+
+    async Task GoTo(int page)
+    {
+        int clamped = Math.Clamp(page, 1, TotalPages);
+        if (clamped != Page)
+            await PageChanged.InvokeAsync(clamped);
+    }
+
+    async Task OnPageInputChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int page))
+            await GoTo(page);
+    }
+
+    async Task OnPageSizeChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int size))
+            await PageSizeChanged.InvokeAsync(size);
+    }
+}

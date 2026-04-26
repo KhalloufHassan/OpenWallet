@@ -274,8 +274,13 @@ public class ApiClient(HttpClient http)
         await http.GetFromJsonAsync<List<TagExpenseDto>>(
             $"api/stats/expenses-by-tag?from={from:O}&to={to:O}") ?? [];
 
-    public async Task<List<BalanceTrendDto>> GetBalanceTrendAsync(int days = 30) =>
-        await http.GetFromJsonAsync<List<BalanceTrendDto>>($"api/stats/balance-trend?days={days}") ?? [];
+    public async Task<List<BalanceTrendDto>> GetBalanceTrendAsync(DateTime? from = null, DateTime? to = null)
+    {
+        string query = string.Empty;
+        if (from.HasValue) query += $"from={from.Value:O}&";
+        if (to.HasValue)   query += $"to={to.Value:O}";
+        return await http.GetFromJsonAsync<List<BalanceTrendDto>>($"api/stats/balance-trend?{query}") ?? [];
+    }
 
     private static string BuildRecordQuery(RecordFilterDto f)
     {

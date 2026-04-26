@@ -31,9 +31,15 @@ public class StatsController(StatsManager manager) : ControllerBase
         [FromQuery] DateTime to) =>
         Ok(await manager.GetExpensesByTagAsync(from, to));
 
-    /// <summary>Returns balance trend data for the last N days.</summary>
+    /// <summary>Returns balance trend data for a date range.</summary>
     [HttpGet("balance-trend")]
     public async Task<ActionResult<List<BalanceTrendDto>>> GetBalanceTrend(
-        [FromQuery] int days = 30) =>
-        Ok(await manager.GetBalanceTrendAsync(days));
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to)
+    {
+        DateTime now = DateTime.UtcNow;
+        DateTime resolvedFrom = from.HasValue ? from.Value : now.AddDays(-30);
+        DateTime resolvedTo   = to.HasValue   ? to.Value   : now;
+        return Ok(await manager.GetBalanceTrendAsync(resolvedFrom, resolvedTo));
+    }
 }

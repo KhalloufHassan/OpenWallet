@@ -79,7 +79,7 @@ else
                     <h5 class="modal-title">@(editingId == null ? "New Template" : "Edit Template")</h5>
                     <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body" style="position:relative">
                     <div class="row g-3">
                         <div class="col-12">
                             <label class="form-label">Template Name</label>
@@ -108,13 +108,10 @@ else
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Category</label>
-                            <select class="form-select" @bind="form.CategoryId">
-                                <option value="0">Select category...</option>
-                                @foreach (CategoryDto c in flatCategories)
-                                {
-                                    <option value="@c.Id">@(c.ParentCategoryId.HasValue ? $"↳ {c.Name}" : c.Name)</option>
-                                }
-                            </select>
+                            <CategoryPicker Categories="categories"
+                                            Value="@(form.CategoryId == 0 ? null : form.CategoryId)"
+                                            ValueChanged="id => form.CategoryId = id ?? 0"
+                                            FullCover="true" />
                         </div>
                         <div class="col-12">
                             <label class="form-label">Notes</label>
@@ -171,7 +168,7 @@ else
 @code {
     List<TemplateDto> templates = [];
     List<AccountDto> accounts = [];
-    List<CategoryDto> flatCategories = [];
+    List<CategoryDto> categories = [];
     List<TagDto> allTags = [];
     bool loading = true;
     bool showModal = false;
@@ -192,7 +189,7 @@ else
     async Task LoadSupport()
     {
         accounts = await Api.GetAccountsAsync();
-        flatCategories = await Api.GetCategoriesFlatAsync();
+        categories = await Api.GetCategoriesAsync();
         allTags = await Api.GetTagsAsync();
     }
 

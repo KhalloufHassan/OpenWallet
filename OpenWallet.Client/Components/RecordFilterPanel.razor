@@ -6,14 +6,9 @@
     {
         <div class="col-6 col-md-3">
             <label class="form-label small text-muted mb-1">Account</label>
-            <select class="form-select form-select-sm" value="@Filter.AccountId"
-                    @onchange="e => Filter.AccountId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : int.Parse(e.Value.ToString()!)">
-                <option value="">All accounts</option>
-                @foreach (AccountDto a in Accounts)
-                {
-                    <option value="@a.Id">@a.Name</option>
-                }
-            </select>
+            <AccountPicker Accounts="Accounts" Value="Filter.AccountId"
+                           ValueChanged="id => Filter.AccountId = id"
+                           Nullable="true" NullLabel="All accounts" />
         </div>
     }
     <div class="col-6 col-md-3">
@@ -23,20 +18,18 @@
                         ValueChanged="id => Filter.CategoryId = id"
                         Placeholder="All categories" />
     </div>
-    @if (Stores.Count > 0)
-    {
-        <div class="col-6 col-md-3">
-            <label class="form-label small text-muted mb-1">Store</label>
-            <select class="form-select form-select-sm" value="@Filter.StoreId"
-                    @onchange="e => Filter.StoreId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : int.Parse(e.Value.ToString()!)">
-                <option value="">All stores</option>
-                @foreach (StoreDto s in Stores)
-                {
-                    <option value="@s.Id">@s.Name</option>
-                }
-            </select>
-        </div>
-    }
+    <div class="col-6 col-md-3">
+        <label class="form-label small text-muted mb-1">Store</label>
+        <StorePicker Stores="Stores" Value="Filter.StoreId"
+                     ValueChanged="id => Filter.StoreId = id"
+                     Nullable="true" NullLabel="All stores" />
+    </div>
+    <div class="col-6 col-md-3">
+        <label class="form-label small text-muted mb-1">Tags</label>
+        <TagsPicker Tags="Tags" SelectedIds="Filter.TagIds"
+                    SelectedIdsChanged="ids => Filter.TagIds = ids"
+                    Placeholder="All tags" />
+    </div>
     <div class="col-6 col-md-2">
         <label class="form-label small text-muted mb-1">Type</label>
         <select class="form-select form-select-sm" value="@Filter.Type"
@@ -74,6 +67,7 @@
     [Parameter, EditorRequired] public List<CategoryDto> Categories { get; set; } = [];
     [Parameter] public List<AccountDto> Accounts { get; set; } = [];
     [Parameter] public List<StoreDto> Stores { get; set; } = [];
+    [Parameter] public List<TagDto> Tags { get; set; } = [];
     [Parameter] public EventCallback OnSearch { get; set; }
     [Parameter] public EventCallback OnReset { get; set; }
 }

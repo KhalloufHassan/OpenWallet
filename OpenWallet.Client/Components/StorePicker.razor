@@ -1,0 +1,103 @@
+@using OpenWallet.Shared.DTOs
+
+<div class="cat-picker @(FullCover ? "full-cover" : "")">
+    <button type="button" class="cat-picker-trigger @(open ? "open" : "")" @onclick="ToggleOpen">
+        @if (Selected != null)
+        {
+            <i class="bi bi-shop me-2 text-muted"></i>
+            <span class="text-truncate">@Selected.Name</span>
+        }
+        else
+        {
+            <i class="bi bi-shop me-2 text-muted"></i>
+            <span class="text-muted">@(Value == null && Nullable ? NullLabel : Placeholder)</span>
+        }
+        <i class="bi bi-chevron-down ms-auto cat-picker-chevron @(open ? "rotated" : "")"></i>
+    </button>
+
+    @if (open)
+    {
+        @if (!FullCover)
+        {
+            <div class="cat-picker-backdrop" @onclick="Close"></div>
+        }
+        <div class="cat-picker-panel @(FullCover ? "full-cover" : "")">
+            <div class="cat-picker-search">
+                <i class="bi bi-search text-muted me-2"></i>
+                <input class="cat-picker-input" @bind="search" @bind:event="oninput"
+                       placeholder="Search stores…" />
+                @if (!string.IsNullOrEmpty(search))
+                {
+                    <button class="cat-picker-clear" @onclick="() => search = string.Empty">
+                        <i class="bi bi-x"></i>
+                    </button>
+                }
+                @if (FullCover)
+                {
+                    <button class="cat-picker-done" @onclick="Close">Done</button>
+                }
+            </div>
+            <div class="cat-picker-list">
+                @if (Nullable && string.IsNullOrEmpty(search))
+                {
+                    <button type="button" class="picker-row @(Value == null ? "picker-row-active" : "")"
+                            @onclick="@(() => Select(null))">
+                        <i class="bi bi-dash-circle text-muted"></i>
+                        <span>@NullLabel</span>
+                        @if (Value == null) { <i class="bi bi-check2 ms-auto text-primary"></i> }
+                    </button>
+                }
+                @if (!Filtered.Any())
+                {
+                    <div class="cat-picker-empty">No stores found</div>
+                }
+                @foreach (StoreDto s in Filtered)
+                {
+                    <button type="button" class="picker-row @(Value == s.Id ? "picker-row-active" : "")"
+                            @onclick="@(() => Select(s.Id))">
+                        <i class="bi bi-shop text-muted"></i>
+                        <span class="text-truncate">@s.Name</span>
+                        @if (Value == s.Id) { <i class="bi bi-check2 ms-auto text-primary"></i> }
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<StoreDto> Stores { get; set; } = [];
+    [Parameter] public int? Value { get; set; }
+    [Parameter] public EventCallback<int?> ValueChanged { get; set; }
+    [Parameter] public bool FullCover { get; set; }
+    [Parameter] public bool Nullable { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Select store…";
+    [Parameter] public string NullLabel { get; set; } = "No store";
+
+    bool open;
+    string search = string.Empty;
+
+    StoreDto? Selected => Value.HasValue ? Stores.FirstOrDefault(s => s.Id == Value.Value) : null;
+
+    IEnumerable<StoreDto> Filtered => string.IsNullOrEmpty(search)
+        ? Stores
+        : Stores.Where(s => s.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+
+    void ToggleOpen()
+    {
+        if (open) Close();
+        else { open = true; search = string.Empty; }
+    }
+
+    void Close()
+    {
+        open = false;
+        search = string.Empty;
+    }
+
+    async Task Select(int? id)
+    {
+        Close();
+        await ValueChanged.InvokeAsync(id);
+    }
+}

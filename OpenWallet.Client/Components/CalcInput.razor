@@ -12,7 +12,7 @@
     {
         <div class="cat-picker-backdrop" @onclick="Confirm"></div>
 
-        <div class="calc-panel">
+        <div class="calc-panel" tabindex="0" @onkeydown="HandleKey" @ref="panelRef">
             <div class="calc-screen">
                 <div class="calc-expr">@(_op != null ? $"{_stored.ToString("N2", CultureInfo.InvariantCulture)} {_op}" : " ")</div>
                 <div class="calc-display-val">@_display</div>
@@ -55,6 +55,42 @@
     decimal _stored;
     string? _op;
     bool _fresh = true;
+    ElementReference panelRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (open)
+        {
+            try { await panelRef.FocusAsync(); }
+            catch { }
+        }
+    }
+
+    void HandleKey(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "0": case "1": case "2": case "3": case "4":
+            case "5": case "6": case "7": case "8": case "9":
+                Digit(e.Key); break;
+            case ".": case ",":
+                Dot(); break;
+            case "+":
+                Operator("+"); break;
+            case "-":
+                Operator("−"); break;
+            case "*":
+                Operator("×"); break;
+            case "/":
+                Operator("÷"); break;
+            case "Backspace":
+                Backspace(); break;
+            case "Delete": case "Escape":
+                Clear(); break;
+            case "Enter": case "=":
+                Equals(); break;
+        }
+    }
 
     void Toggle()
     {
