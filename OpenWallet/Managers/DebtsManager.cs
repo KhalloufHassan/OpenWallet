@@ -99,7 +99,9 @@ public class DebtsManager(AppDbContext db)
             .Select(dr => RecordsManager.MapToDto(dr.Record))
             .ToList();
 
-        decimal paid = records.Sum(r => Math.Abs(r.Amount));
+        decimal paid = d.IsLending
+            ? records.Where(r => r.Type == RecordType.Income).Sum(r => r.Amount)
+            : records.Where(r => r.Type == RecordType.Expense).Sum(r => Math.Abs(r.Amount));
         return new DebtDto
         {
             Id = d.Id,
