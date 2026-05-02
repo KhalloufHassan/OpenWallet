@@ -1,0 +1,90 @@
+@using OpenWallet.Shared.DTOs
+@using OpenWallet.Shared.Models
+
+<div class="widget-card">
+    <div class="d-flex align-items-start justify-content-between mb-2">
+        <div>
+            <div class="fw-semibold">@Debt.PartyName</div>
+            <span class="badge @(Debt.IsLending ? "badge-income" : "badge-expense") small">
+                @(Debt.IsLending ? "I lent" : "I owe")
+            </span>
+            @if (Debt.IsResolved)
+            {
+                <span class="badge bg-secondary ms-1 small">Resolved</span>
+            }
+        </div>
+        <div class="d-flex gap-1">
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => OnEdit.InvokeAsync(Debt)">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger" @onclick="() => OnDelete.InvokeAsync(Debt)">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-2 small mt-1">
+        <div class="col-6">
+            <div class="text-muted">Total</div>
+            <div class="fw-semibold">@Debt.Amount.ToString("N2")</div>
+        </div>
+        <div class="col-6">
+            <div class="text-muted">Paid</div>
+            <div class="fw-semibold amount-positive">@Debt.AmountPaid.ToString("N2")</div>
+        </div>
+        <div class="col-12">
+            <div class="text-muted">Remaining</div>
+            <div class="fw-bold fs-6 @(Debt.AmountRemaining > 0 ? "amount-negative" : "amount-positive")">
+                @Debt.AmountRemaining.ToString("N2")
+            </div>
+        </div>
+    </div>
+
+    @if (Debt.Amount > 0)
+    {
+        decimal pct = Math.Min(100, Debt.AmountPaid / Debt.Amount * 100);
+        <div class="progress mt-2" style="height: 4px;">
+            <div class="progress-bar bg-success" style="width: @pct%"></div>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Debt.Notes))
+    {
+        <div class="text-muted small mt-2">@Debt.Notes</div>
+    }
+
+    @if (Debt.RelatedRecords.Count > 0)
+    {
+        <div class="mt-2 pt-2" style="border-top:1px solid #30363d;">
+            <div class="text-muted small mb-1">
+                <i class="bi bi-receipt me-1"></i>@Debt.RelatedRecords.Count payment(s)
+            </div>
+            @foreach (RecordDto r in Debt.RelatedRecords.Take(3))
+            {
+                <div class="d-flex justify-content-between small text-muted">
+                    <span>@r.DateTime.ToString("MMM dd") · @r.CategoryName</span>
+                    <span class="fw-semibold">@Math.Abs(r.Amount).ToString("N2")</span>
+                </div>
+            }
+            @if (Debt.RelatedRecords.Count > 3)
+            {
+                <div class="small text-muted">+@(Debt.RelatedRecords.Count - 3) more</div>
+            }
+        </div>
+    }
+
+    @if (!Debt.IsResolved)
+    {
+        <button class="btn btn-sm btn-outline-success mt-2 w-100"
+                @onclick="() => OnMarkResolved.InvokeAsync(Debt)">
+            <i class="bi bi-check-circle me-1"></i>Mark as Resolved
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DebtDto Debt { get; set; } = null!;
+    [Parameter] public EventCallback<DebtDto> OnEdit { get; set; }
+    [Parameter] public EventCallback<DebtDto> OnDelete { get; set; }
+    [Parameter] public EventCallback<DebtDto> OnMarkResolved { get; set; }
+}
