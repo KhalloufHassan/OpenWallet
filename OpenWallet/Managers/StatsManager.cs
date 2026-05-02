@@ -19,7 +19,7 @@ public class StatsManager(AppDbContext db, AccountsManager accountsManager, Reco
         List<AccountDto> accounts = await accountsManager.GetAllAsync();
         decimal totalBalance = accounts.Sum(a => a.CurrentBalance);
 
-        List<RecordDto> recentRecords = await recordsManager.GetRecentAsync(10);
+        List<RecordDto> recentRecords = await recordsManager.GetRecentAsync(10, start, end);
 
         List<CategoryExpenseDto> expensesByCategory = await GetExpensesByCategoryAsync(start, end);
         List<TagExpenseDto> expensesByTag = await GetExpensesByTagAsync(start, end);

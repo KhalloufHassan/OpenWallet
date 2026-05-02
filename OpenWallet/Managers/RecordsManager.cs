@@ -71,15 +71,20 @@ public class RecordsManager(AppDbContext db)
         return MapToDto(record);
     }
 
-    public async Task<List<RecordDto>> GetRecentAsync(int count = 10)
+    public async Task<List<RecordDto>> GetRecentAsync(int count = 10, DateTime? from = null, DateTime? to = null)
     {
-        List<Record> records = await db.Records
+        IQueryable<Record> query = db.Records
             .Include(r => r.Account)
             .Include(r => r.Category)
             .Include(r => r.Store)
             .Include(r => r.RecordTags).ThenInclude(rt => rt.Tag)
             .Include(r => r.Attachments)
-            .Include(r => r.LinkedTransferRecord)
+            .Include(r => r.LinkedTransferRecord);
+
+        if (from.HasValue) query = query.Where(r => r.DateTime >= from.Value);
+        if (to.HasValue) query = query.Where(r => r.DateTime <= to.Value);
+
+        List<Record> records = await query
             .OrderByDescending(r => r.DateTime)
             .Take(count)
             .ToListAsync();
