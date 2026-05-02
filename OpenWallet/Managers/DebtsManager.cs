@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenWallet.Database;
 using OpenWallet.Database.Models;
 using OpenWallet.Shared.DTOs;
+using OpenWallet.Shared.Models;
 
 namespace OpenWallet.Managers;
 
