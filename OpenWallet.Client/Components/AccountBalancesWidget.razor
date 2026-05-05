@@ -5,7 +5,8 @@
     <div class="d-flex flex-wrap gap-3">
         @foreach (AccountDto account in Dashboard.Accounts)
         {
-            <div class="acct-balance-item">
+            <div class="acct-balance-item @(OnAccountClick.HasDelegate ? "acct-balance-item--clickable" : "")"
+                 @onclick="() => OnAccountClick.InvokeAsync(account.Id)">
                 <div class="d-flex align-items-center gap-2 mb-1">
                     <span class="account-color-dot" style="background-color: @account.Color"></span>
                     <span class="fw-semibold small text-truncate">@account.Name</span>
@@ -28,4 +29,5 @@
 @code {
     [Parameter, EditorRequired] public DashboardDto Dashboard { get; set; } = new();
     [Parameter] public bool IsMasked { get; set; }
+    [Parameter] public EventCallback<int> OnAccountClick { get; set; }
 }

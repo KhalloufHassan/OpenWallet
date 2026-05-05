@@ -49,7 +49,7 @@ else if (!string.IsNullOrEmpty(loadError))
 else if (dashboard != null)
 {
     <div class="d-flex flex-column gap-3">
-        <AccountBalancesWidget Dashboard="dashboard" IsMasked="Privacy.IsMasked" />
+        <AccountBalancesWidget Dashboard="dashboard" IsMasked="Privacy.IsMasked" OnAccountClick="FilterByAccount" />
         <RecentRecordsWidget Records="FilteredRecords.ToList()" OnRecordClick="GoToRecords" />
         <div class="row g-3">
             <div class="col-xl-6">
@@ -191,6 +191,12 @@ else
         {
             loading = false;
         }
+    }
+
+    void FilterByAccount(int accountId)
+    {
+        filter.AccountId = accountId;
+        filtersOpen = true;
     }
 
     void GoToRecords(RecordDto _) => Nav.NavigateTo("records");
