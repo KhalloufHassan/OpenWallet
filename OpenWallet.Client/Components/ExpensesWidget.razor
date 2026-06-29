@@ -11,11 +11,21 @@
                     @onclick="@(() => SwitchTab("tag"))">Tag</button>
         </div>
     </div>
+    @if (Currencies.Count > 1)
+    {
+        <div class="btn-group btn-group-sm mb-3">
+            @foreach (string currency in Currencies)
+            {
+                <button class="btn @(currency == selectedCurrency ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="@(() => SelectCurrency(currency))">@currency</button>
+            }
+        </div>
+    }
     <canvas id="pieChart" height="200"></canvas>
     <div class="mt-3">
         @if (pieTab == "category")
         {
-            @foreach (CategoryExpenseDto item in ExpensesByCategory.Take(5))
+            @foreach (CategoryExpenseDto item in CurrentCategory.Take(5))
             {
                 <div class="d-flex align-items-center justify-content-between mb-1 small">
                     <div>
@@ -28,7 +38,7 @@
         }
         else
         {
-            @foreach (TagExpenseDto item in ExpensesByTag.Take(5))
+            @foreach (TagExpenseDto item in CurrentTag.Take(5))
             {
                 <div class="d-flex align-items-center justify-content-between mb-1 small">
                     <div><i class="bi bi-tag me-1"></i>@item.TagName</div>
@@ -45,13 +55,34 @@
     [Parameter] public bool IsMasked { get; set; }
 
     string pieTab = "category";
+    string? selectedCurrency;
     bool chartDirty = true;
 
-    protected override void OnParametersSet() => chartDirty = true;
+    List<string> Currencies => ExpensesByCategory.Select(e => e.Currency)
+        .Concat(ExpensesByTag.Select(e => e.Currency))
+        .Distinct()
+        .OrderBy(c => c)
+        .ToList();
+
+    IEnumerable<CategoryExpenseDto> CurrentCategory => ExpensesByCategory.Where(e => e.Currency == selectedCurrency);
+    IEnumerable<TagExpenseDto> CurrentTag => ExpensesByTag.Where(e => e.Currency == selectedCurrency);
+
+    protected override void OnParametersSet()
+    {
+        if (selectedCurrency == null || !Currencies.Contains(selectedCurrency))
+            selectedCurrency = Currencies.FirstOrDefault();
+        chartDirty = true;
+    }
 
     void SwitchTab(string tab)
     {
         pieTab = tab;
+        chartDirty = true;
+    }
+
+    void SelectCurrency(string currency)
+    {
+        selectedCurrency = currency;
         chartDirty = true;
     }
 
@@ -61,16 +92,16 @@
         chartDirty = false;
 
         List<string> labels = pieTab == "category"
-            ? ExpensesByCategory.Select(e => e.CategoryName).ToList()
-            : ExpensesByTag.Select(e => e.TagName).ToList();
+            ? CurrentCategory.Select(e => e.CategoryName).ToList()
+            : CurrentTag.Select(e => e.TagName).ToList();
 
         List<decimal> data = pieTab == "category"
-            ? ExpensesByCategory.Select(e => e.Amount).ToList()
-            : ExpensesByTag.Select(e => e.Amount).ToList();
+            ? CurrentCategory.Select(e => e.Amount).ToList()
+            : CurrentTag.Select(e => e.Amount).ToList();
 
         List<string> colors = pieTab == "category"
-            ? ExpensesByCategory.Select(e => e.CategoryColor).ToList()
-            : ExpensesByTag.Select(_ => "#388bfd").ToList();
+            ? CurrentCategory.Select(e => e.CategoryColor).ToList()
+            : CurrentTag.Select(_ => "#388bfd").ToList();
 
         await JS.InvokeVoidAsync("renderPieChart", "pieChart", labels, data, colors);
     }

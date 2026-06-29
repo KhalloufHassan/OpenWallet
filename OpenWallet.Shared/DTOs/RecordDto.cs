@@ -23,6 +23,7 @@ public class RecordDto
     public double? Longitude { get; set; }
     public int? LinkedTransferRecordId { get; set; }
     public int? LinkedAccountId { get; set; }
+    public decimal LinkedAmount { get; set; }
     public List<TagDto> Tags { get; set; } = [];
     public List<AttachmentDto> Attachments { get; set; } = [];
 }
@@ -47,6 +48,7 @@ public class CreateTransferDto
     public int ToAccountId { get; set; }
     public int? CategoryId { get; set; }
     public decimal Amount { get; set; }
+    public decimal? ToAmount { get; set; }
     public DateTime DateTime { get; set; }
     public string Notes { get; set; } = string.Empty;
     public List<int> TagIds { get; set; } = [];

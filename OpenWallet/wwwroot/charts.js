@@ -60,28 +60,30 @@ window.renderPieChart = function (canvasId, labels, data, colors) {
     });
 };
 
-window.renderLineChart = function (canvasId, labels, data) {
+window.renderLineChart = function (canvasId, labels, series) {
     if (chartInstances[canvasId]) {
         chartInstances[canvasId].destroy();
     }
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
+    const single = series.length <= 1;
     chartInstances[canvasId] = new Chart(ctx, {
         type: 'line',
         data: {
             labels,
-            datasets: [{
-                data,
-                borderColor: '#388bfd',
-                backgroundColor: 'rgba(56, 139, 253, 0.1)',
+            datasets: series.map(s => ({
+                label: s.label,
+                data: s.data,
+                borderColor: s.color,
+                backgroundColor: s.color + '1a',
                 borderWidth: 2,
-                fill: true,
+                fill: single,
                 tension: 0.3,
                 pointRadius: 0
-            }]
+            }))
         },
         options: {
-            plugins: { legend: { display: false } },
+            plugins: { legend: { display: !single, labels: { color: '#8b949e' } } },
             scales: {
                 x: {
                     ticks: { color: '#8b949e', maxTicksLimit: 8 },

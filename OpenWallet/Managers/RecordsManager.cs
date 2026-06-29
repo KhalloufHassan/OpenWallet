@@ -135,7 +135,7 @@ public class RecordsManager(AppDbContext db)
             AccountId = dto.ToAccountId,
             CategoryId = dto.CategoryId,
             Type = RecordType.Transfer,
-            Amount = Math.Abs(dto.Amount),
+            Amount = Math.Abs(dto.ToAmount ?? dto.Amount),
             DateTime = Utc(dto.DateTime),
             Notes = dto.Notes
         };
@@ -181,7 +181,7 @@ public class RecordsManager(AppDbContext db)
 
         incoming.AccountId  = dto.ToAccountId;
         incoming.CategoryId = dto.CategoryId;
-        incoming.Amount     = Math.Abs(dto.Amount);
+        incoming.Amount     = Math.Abs(dto.ToAmount ?? dto.Amount);
         incoming.DateTime   = Utc(dto.DateTime);
         incoming.Notes      = dto.Notes;
 
@@ -281,6 +281,7 @@ public class RecordsManager(AppDbContext db)
         Longitude = r.Location?.X,
         LinkedTransferRecordId = r.LinkedTransferRecordId,
         LinkedAccountId = r.LinkedTransferRecord?.AccountId,
+        LinkedAmount = r.LinkedTransferRecord?.Amount ?? 0m,
         Tags = r.RecordTags?.Select(rt => new TagDto { Id = rt.Tag.Id, Name = rt.Tag.Name }).ToList() ?? [],
         Attachments = r.Attachments?.Select(a => new AttachmentDto
         {

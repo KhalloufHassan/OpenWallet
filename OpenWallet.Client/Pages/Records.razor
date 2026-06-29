@@ -94,9 +94,18 @@ else
                                               FullCover="true" Placeholder="Select account…" />
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Amount</label>
+                                <label class="form-label">
+                                    Amount@(TransferCurrenciesDiffer ? $" ({CurrencyOf(transferDto.FromAccountId)})" : "")
+                                </label>
                                 <CalcInput Value="transferDto.Amount" ValueChanged="v => transferDto.Amount = v" />
                             </div>
+                            @if (TransferCurrenciesDiffer)
+                            {
+                                <div class="col-md-6">
+                                    <label class="form-label">Amount Received (@CurrencyOf(transferDto.ToAccountId))</label>
+                                    <CalcInput Value="transferToAmount" ValueChanged="v => transferToAmount = v" />
+                                </div>
+                            }
                             <div class="col-md-6">
                                 <label class="form-label">Category <span class="text-muted small">(optional)</span></label>
                                 <CategoryPicker Categories="categories"
@@ -368,6 +377,13 @@ else
     CreateRecordDto recordForm = new() { DateTime = DateTime.Now, Type = RecordType.Expense };
     decimal recordAmount;
     CreateTransferDto transferDto = new() { DateTime = DateTime.Now };
+    decimal transferToAmount;
+
+    string CurrencyOf(int accountId) => accounts.FirstOrDefault(a => a.Id == accountId)?.Currency ?? string.Empty;
+
+    bool TransferCurrenciesDiffer =>
+        transferDto.FromAccountId != 0 && transferDto.ToAccountId != 0
+        && CurrencyOf(transferDto.FromAccountId) != CurrencyOf(transferDto.ToAccountId);
 
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -495,6 +511,7 @@ else
             currentAttachments = [];
             recordForm = new CreateRecordDto { DateTime = DateTime.Now, Type = RecordType.Expense, AccountId = lastAccountId };
             recordAmount = 0;
+            transferToAmount = 0;
             transferDto = new CreateTransferDto { DateTime = DateTime.Now, FromAccountId = lastAccountId };
         }
         else
@@ -505,16 +522,19 @@ else
             if (transfer)
             {
                 bool isOutgoing = record.Amount < 0;
+                decimal fromAmount = Math.Abs(isOutgoing ? record.Amount : record.LinkedAmount);
+                decimal toAmount = Math.Abs(isOutgoing ? record.LinkedAmount : record.Amount);
                 transferDto = new CreateTransferDto
                 {
                     FromAccountId = isOutgoing ? record.AccountId : (record.LinkedAccountId ?? 0),
                     ToAccountId   = isOutgoing ? (record.LinkedAccountId ?? 0) : record.AccountId,
                     CategoryId    = record.CategoryId == 0 ? null : record.CategoryId,
-                    Amount        = Math.Abs(record.Amount),
+                    Amount        = fromAmount,
                     DateTime      = record.DateTime,
                     Notes         = record.Notes,
                     TagIds        = record.Tags.Select(t => t.Id).ToList()
                 };
+                transferToAmount = toAmount;
             }
             recordForm = new CreateRecordDto
             {
@@ -561,6 +581,19 @@ else
                 {
                     error = "Please fill all required fields.";
                     return;
+                }
+                if (TransferCurrenciesDiffer)
+                {
+                    if (transferToAmount == 0)
+                    {
+                        error = "Please enter the received amount.";
+                        return;
+                    }
+                    transferDto.ToAmount = transferToAmount;
+                }
+                else
+                {
+                    transferDto.ToAmount = null;
                 }
                 if (editingId == null)
                     await Api.CreateTransferAsync(transferDto);

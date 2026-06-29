@@ -9,6 +9,9 @@
 @code {
     [Parameter, EditorRequired] public List<BalanceTrendDto> BalanceTrend { get; set; } = [];
 
+    static readonly string[] Palette =
+        ["#388bfd", "#3fb950", "#d29922", "#db61a2", "#a371f7", "#f85149", "#39c5cf"];
+
     bool chartDirty = true;
 
     protected override void OnParametersSet() => chartDirty = true;
@@ -18,8 +21,20 @@
         if (!chartDirty) return;
         chartDirty = false;
 
-        List<string> labels = BalanceTrend.Select(t => t.Date.ToString("MMM dd")).ToList();
-        List<decimal> data = BalanceTrend.Select(t => t.Balance).ToList();
-        await JS.InvokeVoidAsync("renderLineChart", "trendChart", labels, data);
+        List<DateTime> dates = BalanceTrend.Select(t => t.Date).Distinct().OrderBy(d => d).ToList();
+        List<string> labels = dates.Select(d => d.ToString("MMM dd")).ToList();
+        List<string> currencies = BalanceTrend.Select(t => t.Currency).Distinct().OrderBy(c => c).ToList();
+
+        Dictionary<(DateTime, string), decimal> lookup =
+            BalanceTrend.ToDictionary(t => (t.Date, t.Currency), t => t.Balance);
+
+        object[] series = currencies.Select((currency, index) => (object)new
+        {
+            label = currency,
+            color = Palette[index % Palette.Length],
+            data = dates.Select(d => lookup.GetValueOrDefault((d, currency), 0m)).ToList()
+        }).ToArray();
+
+        await JS.InvokeVoidAsync("renderLineChart", "trendChart", labels, series);
     }
 }

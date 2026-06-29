@@ -18,10 +18,18 @@
             </div>
         }
         <div class="acct-balance-item acct-balance-total">
-            <div class="text-muted small mb-1">Total Balance</div>
-            <div class="fs-4 fw-bold text-primary @(IsMasked ? "masked" : "")">
-                @(IsMasked ? "•••••" : Dashboard.TotalBalance.ToString("N2"))
-            </div>
+            <div class="text-muted small mb-1">@(Dashboard.TotalsByCurrency.Count > 1 ? "Totals" : "Total Balance")</div>
+            @if (IsMasked)
+            {
+                <div class="fs-4 fw-bold text-primary masked">•••••</div>
+            }
+            else
+            {
+                @foreach (CurrencyTotalDto total in Dashboard.TotalsByCurrency)
+                {
+                    <div class="fs-4 fw-bold text-primary">@total.Currency @total.Total.ToString("N2")</div>
+                }
+            }
         </div>
     </div>
 </div>
