@@ -1,0 +1,9 @@
+@inject NavigationManager Nav
+
+<button type="button" class="add-record-fab" @onclick="GoToAdd" aria-label="Add record" title="Add record">
+    <i class="bi bi-plus-lg"></i>
+</button>
+
+@code {
+    void GoToAdd() => Nav.NavigateTo("records?add=true");
+}

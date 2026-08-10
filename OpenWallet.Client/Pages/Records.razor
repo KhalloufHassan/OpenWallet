@@ -409,6 +409,12 @@ else
     {
         await Task.WhenAll(LoadRecords(), LoadSupport());
         loading = false;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loading || showModal)
+            return;
 
         if (AddNew)
         {
