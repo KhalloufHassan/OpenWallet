@@ -23,6 +23,10 @@
             <div class="cat-picker-backdrop" @onclick="Close"></div>
         }
         <div class="cat-picker-panel @(FullCover ? "full-cover" : "")">
+            @if (FullCover)
+            {
+                <PickerPanelHeader Title="@Title" Icon="bi-bank2" OnClose="Close" />
+            }
             <div class="cat-picker-search">
                 <i class="bi bi-search text-muted me-2"></i>
                 <input class="cat-picker-input" @bind="search" @bind:event="oninput"
@@ -32,10 +36,6 @@
                     <button class="cat-picker-clear" @onclick="() => search = string.Empty">
                         <i class="bi bi-x"></i>
                     </button>
-                }
-                @if (FullCover)
-                {
-                    <button class="cat-picker-done" @onclick="Close">Done</button>
                 }
             </div>
             <div class="cat-picker-list">
@@ -75,6 +75,7 @@
     [Parameter] public bool Nullable { get; set; }
     [Parameter] public string Placeholder { get; set; } = "Select account…";
     [Parameter] public string NullLabel { get; set; } = "All accounts";
+    [Parameter] public string Title { get; set; } = "Select account";
 
     bool open;
     string search = string.Empty;

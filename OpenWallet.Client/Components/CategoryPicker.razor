@@ -24,6 +24,10 @@
             <div class="cat-picker-backdrop" @onclick="Close"></div>
         }
         <div class="cat-picker-panel @(FullCover ? "full-cover" : "")">
+            @if (FullCover)
+            {
+                <PickerPanelHeader Title="Select category" Icon="bi-grid" OnClose="Close" />
+            }
             <div class="cat-picker-search">
                 <i class="bi bi-search text-muted me-2"></i>
                 <input class="cat-picker-input" @bind="search" @bind:event="oninput"
@@ -33,10 +37,6 @@
                     <button class="cat-picker-clear" @onclick="() => search = string.Empty">
                         <i class="bi bi-x"></i>
                     </button>
-                }
-                @if (FullCover)
-                {
-                    <button class="cat-picker-done" @onclick="Close">Done</button>
                 }
             </div>
 

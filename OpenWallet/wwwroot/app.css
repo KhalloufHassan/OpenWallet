@@ -1,6 +1,40 @@
 html, body {
     background-color: #0d1117;
     color: #e6edf3;
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+}
+
+/* ─── Touch behaviour (installed web app on iOS/Android) ─── */
+/* `manipulation` keeps scrolling and pinch-zoom but drops the double-tap-to-zoom gesture. */
+button,
+a,
+label,
+summary,
+input,
+select,
+textarea,
+[role="button"],
+.nav-link,
+.record-row,
+.cat-picker-trigger,
+.calc-btn {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS auto-zooms the page when a control smaller than 16px takes focus, and in
+   standalone mode there is no address bar to zoom back out with. */
+@media (pointer: coarse) {
+    .form-control,
+    .form-control-sm,
+    .form-select,
+    .form-select-sm,
+    input,
+    select,
+    textarea {
+        font-size: 16px;
+    }
 }
 
 /* ─── Sidebar ─── */
@@ -306,29 +340,63 @@ html, body {
     flex-direction: column;
 }
 
+/* A full-cover picker fills the whole .modal-content, not just the body, so the
+   host modal's close button cannot be hit while a picker is open. Bootstrap puts
+   `position: relative` on .modal-body, so the host has to opt out of it. */
+.modal-body.picker-host {
+    position: static;
+}
+
 .cat-picker-panel.full-cover {
     position: absolute;
     inset: 0;
     max-height: none;
-    border-radius: 0;
+    border-radius: var(--bs-modal-border-radius, 0.5rem);
     border: none;
     box-shadow: none;
-    z-index: 10;
+    z-index: 1050;
+}
+
+.cat-picker-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+    border-bottom: 1px solid #30363d;
+    background-color: #1c2128;
+    flex-shrink: 0;
+}
+
+.cat-picker-header-title {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex: 1;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #e6edf3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .cat-picker-done {
     background: none;
     border: none;
     color: #388bfd;
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
     font-weight: 600;
-    padding: 0 0 0 0.5rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: 6px;
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
+    min-height: 40px;
+    min-width: 64px;
 }
 
-.cat-picker-done:hover { color: #58a6ff; }
+.cat-picker-done:hover { color: #58a6ff; background-color: #21262d; }
+.cat-picker-done:active { background-color: #2d333b; }
 
 .cat-picker-separator {
     height: 1px;
@@ -451,6 +519,8 @@ html, body {
     background-color: #0d1117;
     border-bottom: 1px solid #30363d;
     text-align: right;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .calc-expr {
@@ -486,6 +556,7 @@ html, body {
     transition: background-color 0.1s;
     user-select: none;
     -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .calc-btn:hover   { background-color: #21262d; }

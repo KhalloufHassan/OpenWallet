@@ -75,7 +75,7 @@ else
                         <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
                     </div>
                 </div>
-                <div class="modal-body" style="position: relative">
+                <div class="modal-body picker-host">
                     @if (isTransfer)
                     {
                         <div class="row g-3">
@@ -84,14 +84,16 @@ else
                                 <AccountPicker Accounts="accounts"
                                               Value="@(transferDto.FromAccountId == 0 ? null : transferDto.FromAccountId)"
                                               ValueChanged="id => transferDto.FromAccountId = id ?? 0"
-                                              FullCover="true" Placeholder="Select account…" />
+                                              FullCover="true" Placeholder="Select account…"
+                                              Title="From account" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">To Account</label>
                                 <AccountPicker Accounts="accounts"
                                               Value="@(transferDto.ToAccountId == 0 ? null : transferDto.ToAccountId)"
                                               ValueChanged="id => transferDto.ToAccountId = id ?? 0"
-                                              FullCover="true" Placeholder="Select account…" />
+                                              FullCover="true" Placeholder="Select account…"
+                                              Title="To account" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">

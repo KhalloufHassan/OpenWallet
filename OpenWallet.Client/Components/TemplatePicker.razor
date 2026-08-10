@@ -13,6 +13,10 @@
             <div class="cat-picker-backdrop" @onclick="Close"></div>
         }
         <div class="cat-picker-panel @(FullCover ? "full-cover" : "")">
+            @if (FullCover)
+            {
+                <PickerPanelHeader Title="Apply template" Icon="bi-bookmark" DoneLabel="Cancel" OnClose="Close" />
+            }
             <div class="cat-picker-search">
                 <i class="bi bi-search text-muted me-2"></i>
                 <input class="cat-picker-input" @bind="search" @bind:event="oninput"
@@ -23,7 +27,10 @@
                         <i class="bi bi-x"></i>
                     </button>
                 }
-                <button class="cat-picker-done" @onclick="Close">Cancel</button>
+                @if (!FullCover)
+                {
+                    <button class="cat-picker-done" @onclick="Close">Cancel</button>
+                }
             </div>
             <div class="cat-picker-list">
                 @if (!Filtered.Any())

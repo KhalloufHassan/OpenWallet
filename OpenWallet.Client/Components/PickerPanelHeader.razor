@@ -1,0 +1,16 @@
+@* Top bar for full-cover pickers. Sits where the host modal's close button would be,
+   so the only dismiss control on screen belongs to the picker itself. *@
+
+<div class="cat-picker-header">
+    <span class="cat-picker-header-title">
+        <i class="bi @Icon me-2 text-muted"></i>@Title
+    </span>
+    <button type="button" class="cat-picker-done" @onclick="OnClose">@DoneLabel</button>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+    [Parameter] public string DoneLabel { get; set; } = "Done";
+    [Parameter] public EventCallback OnClose { get; set; }
+}
