@@ -13,8 +13,8 @@ public class StatsManager(AppDbContext db, AccountsManager accountsManager, Reco
         DateTime now = DateTime.UtcNow;
         DateTime start = from.HasValue ? DateTime.SpecifyKind(from.Value, DateTimeKind.Utc)
             : new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        DateTime end = to.HasValue ? DateTime.SpecifyKind(to.Value, DateTimeKind.Utc)
-            : start.AddMonths(1).AddTicks(-1);
+        DateTime end = to.HasValue ? DateTime.SpecifyKind(to.Value.Date, DateTimeKind.Utc)
+            : start.AddMonths(1).AddDays(-1);
 
         List<AccountDto> accounts = await accountsManager.GetAllAsync();
         List<CurrencyTotalDto> totalsByCurrency = accounts
@@ -45,7 +45,7 @@ public class StatsManager(AppDbContext db, AccountsManager accountsManager, Reco
         List<Record> expenses = await db.Records
             .Include(r => r.Category)
             .Include(r => r.Account)
-            .Where(r => r.Type == RecordType.Expense && r.DateTime >= from && r.DateTime <= to)
+            .Where(r => r.Type == RecordType.Expense && r.DateTime >= from && r.DateTime < to.Date.AddDays(1))
             .ToListAsync();
 
         Dictionary<string, decimal> totalByCurrency = expenses
@@ -75,7 +75,7 @@ public class StatsManager(AppDbContext db, AccountsManager accountsManager, Reco
         List<Record> expenses = await db.Records
             .Include(r => r.RecordTags).ThenInclude(rt => rt.Tag)
             .Include(r => r.Account)
-            .Where(r => r.Type == RecordType.Expense && r.DateTime >= from && r.DateTime <= to)
+            .Where(r => r.Type == RecordType.Expense && r.DateTime >= from && r.DateTime < to.Date.AddDays(1))
             .ToListAsync();
 
         Dictionary<string, decimal> totalByCurrency = expenses

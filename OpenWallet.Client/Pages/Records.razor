@@ -369,13 +369,15 @@ else
     List<IBrowserFile> pendingUploads = [];
 
     bool filtersExpanded;
-    RecordFilterDto filter = new()
+    static RecordFilterDto DefaultFilter() => new()
     {
         Page = 1,
         PageSize = 50,
-        FromDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1),
-        ToDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1).AddMonths(1).AddDays(-1)
+        FromDate = DateTime.Today.AddDays(-29),
+        ToDate = DateTime.Today
     };
+
+    RecordFilterDto filter = DefaultFilter();
     CreateRecordDto recordForm = new() { DateTime = DateTime.Now, Type = RecordType.Expense };
     decimal recordAmount;
     CreateTransferDto transferDto = new() { DateTime = DateTime.Now };
@@ -477,14 +479,7 @@ else
 
     async Task ResetFilter()
     {
-        DateTime monthStart = new(DateTime.Now.Year, DateTime.Now.Month, 1);
-        filter = new RecordFilterDto
-        {
-            Page = 1,
-            PageSize = 50,
-            FromDate = monthStart,
-            ToDate = monthStart.AddMonths(1).AddDays(-1)
-        };
+        filter = DefaultFilter();
         await ApplyFilter();
     }
 
@@ -684,13 +679,17 @@ else
 
     async Task CaptureLocation()
     {
+        var targetForm = recordForm;
         capturingLocation = true;
         locationError = string.Empty;
         try
         {
             GeoCoords coords = await JS.InvokeAsync<GeoCoords>("getCurrentPosition");
-            recordForm.Latitude = coords.Latitude;
-            recordForm.Longitude = coords.Longitude;
+            if (showModal && ReferenceEquals(recordForm, targetForm))
+            {
+                recordForm.Latitude = coords.Latitude;
+                recordForm.Longitude = coords.Longitude;
+            }
         }
         catch (Exception ex) { locationError = ex.Message; }
         finally

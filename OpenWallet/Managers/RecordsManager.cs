@@ -37,7 +37,7 @@ public class RecordsManager(AppDbContext db)
             query = query.Where(r => r.DateTime >= Utc(filter.FromDate.Value));
 
         if (filter.ToDate.HasValue)
-            query = query.Where(r => r.DateTime <= Utc(filter.ToDate.Value));
+            query = query.Where(r => r.DateTime < Utc(filter.ToDate.Value.Date.AddDays(1)));
 
         if (filter.TagIds.Count > 0)
             query = query.Where(r => r.RecordTags.Any(rt => filter.TagIds.Contains(rt.TagId)));
@@ -82,7 +82,7 @@ public class RecordsManager(AppDbContext db)
             .Include(r => r.LinkedTransferRecord);
 
         if (from.HasValue) query = query.Where(r => r.DateTime >= from.Value);
-        if (to.HasValue) query = query.Where(r => r.DateTime <= to.Value);
+        if (to.HasValue) query = query.Where(r => r.DateTime < to.Value.Date.AddDays(1));
 
         List<Record> records = await query
             .OrderByDescending(r => r.DateTime)

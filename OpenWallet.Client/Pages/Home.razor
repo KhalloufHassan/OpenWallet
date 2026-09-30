@@ -81,15 +81,11 @@ else
     bool filtersOpen;
     string loadError = string.Empty;
 
-    static RecordFilterDto DefaultFilter()
+    static RecordFilterDto DefaultFilter() => new()
     {
-        DateTime monthStart = new(DateTime.Now.Year, DateTime.Now.Month, 1);
-        return new RecordFilterDto
-        {
-            FromDate = monthStart,
-            ToDate = monthStart.AddMonths(1).AddDays(-1)
-        };
-    }
+        FromDate = DateTime.Today.AddDays(-29),
+        ToDate = DateTime.Today
+    };
 
     RecordFilterDto filter = DefaultFilter();
 
