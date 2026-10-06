@@ -10,6 +10,8 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=openwallet;Username=openwallet;Password=openwallet
       - ASPNETCORE_ENVIRONMENT=Production
+      # Uncomment when OpenWallet runs behind a reverse proxy that handles HTTPS (see the README).
+      # - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
     depends_on:
       db:
         condition: service_healthy

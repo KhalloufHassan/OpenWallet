@@ -1,4 +1,3 @@
-using Fido2NetLib;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +36,8 @@ builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
         options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
         options.Lockout.MaxFailedAccessAttempts = 5;
         options.Lockout.AllowedForNewUsers = true;
+
+        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
@@ -73,16 +74,6 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo("/app/uploads/.keys"));
-
-builder.Services.AddMemoryCache();
-
-builder.Services.AddFido2(options =>
-{
-    options.ServerDomain = builder.Configuration["Fido2:ServerDomain"] ?? "localhost";
-    options.ServerName = builder.Configuration["Fido2:ServerName"] ?? "OpenWallet";
-    options.Origins = (builder.Configuration.GetSection("Fido2:Origins").Get<HashSet<string>>()) ?? [];
-    options.TimestampDriftTolerance = 300000;
-});
 
 builder.Services.AddRazorComponents()
     .AddInteractiveWebAssemblyComponents();

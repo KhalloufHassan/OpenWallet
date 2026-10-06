@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using OpenWallet.Database;
-using OpenWallet.Database.Models;
 using OpenWallet.Shared.DTOs;
 
 namespace OpenWallet.Controllers;
@@ -11,8 +9,7 @@ namespace OpenWallet.Controllers;
 [Route("api/auth")]
 public class AuthController(
     UserManager<IdentityUser> userManager,
-    SignInManager<IdentityUser> signInManager,
-    AppDbContext db) : ControllerBase
+    SignInManager<IdentityUser> signInManager) : ControllerBase
 {
     /// <summary>Returns the currently authenticated user's username.</summary>
     [HttpGet("me")]
@@ -90,19 +87,12 @@ public class AuthController(
         if (user == null) return NotFound();
 
         bool totpEnabled = await userManager.GetTwoFactorEnabledAsync(user);
-        List<PasskeyCredential> passkeys = db.PasskeyCredentials
-            .Where(p => p.UserId == user.Id)
-            .ToList();
+        IList<UserPasskeyInfo> passkeys = await userManager.GetPasskeysAsync(user);
 
         return Ok(new SecurityStatusDto
         {
             TotpEnabled = totpEnabled,
-            Passkeys = passkeys.Select(p => new PasskeyInfoDto
-            {
-                Id = p.Id,
-                Name = p.Name,
-                CreatedAt = p.CreatedAt
-            }).ToList()
+            Passkeys = passkeys.Select(PasskeysController.ToDto).ToList()
         });
     }
 

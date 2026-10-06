@@ -14,15 +14,10 @@ const _activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchst
 
 window.owAuth = {
     isWebAuthnSupported: () =>
-        window.PublicKeyCredential !== undefined &&
-        typeof window.PublicKeyCredential === 'function',
-
-    isPasskeySupported: async () => {
-        if (!window.owAuth.isWebAuthnSupported()) return false;
-        try {
-            return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        } catch { return false; }
-    },
+        typeof navigator.credentials !== 'undefined' &&
+        typeof window.PublicKeyCredential !== 'undefined' &&
+        typeof window.PublicKeyCredential.parseCreationOptionsFromJSON === 'function' &&
+        typeof window.PublicKeyCredential.parseRequestOptionsFromJSON === 'function',
 
     hasPlatformKey: () => localStorage.getItem('ow_platform_key') === '1',
     setPlatformKey: (val) => {
@@ -31,32 +26,16 @@ window.owAuth = {
     },
 
     passkeyRegister: async (optionsJson) => {
-        const options = JSON.parse(optionsJson);
-        options.challenge = base64UrlDecode(options.challenge);
-        options.user.id = base64UrlDecode(options.user.id);
-        if (options.excludeCredentials) {
-            options.excludeCredentials = options.excludeCredentials.map(c => ({
-                ...c,
-                id: base64UrlDecode(c.id)
-            }));
-        }
-
+        const options = PublicKeyCredential.parseCreationOptionsFromJSON(JSON.parse(optionsJson));
         const credential = await navigator.credentials.create({ publicKey: options });
-        return JSON.stringify(encodeRegistrationCredential(credential));
+        if (credential.authenticatorAttachment === 'platform') window.owAuth.setPlatformKey(true);
+        return JSON.stringify(credential);
     },
 
     passkeyAuthenticate: async (optionsJson) => {
-        const options = JSON.parse(optionsJson);
-        options.challenge = base64UrlDecode(options.challenge);
-        if (options.allowCredentials) {
-            options.allowCredentials = options.allowCredentials.map(c => ({
-                ...c,
-                id: base64UrlDecode(c.id)
-            }));
-        }
-
-        const assertion = await navigator.credentials.get({ publicKey: options });
-        return JSON.stringify(encodeAssertionCredential(assertion));
+        const options = PublicKeyCredential.parseRequestOptionsFromJSON(JSON.parse(optionsJson));
+        const credential = await navigator.credentials.get({ publicKey: options });
+        return JSON.stringify(credential);
     },
 
     startInactivityTimer: (dotnetRef, minutes) => {
@@ -79,48 +58,3 @@ window.owAuth = {
         new QRCode(el, { text, width: 200, height: 200, colorDark: '#fff', colorLight: '#0d1117' });
     }
 };
-
-function base64UrlDecode(base64url) {
-    const padding = '='.repeat((4 - base64url.length % 4) % 4);
-    const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/') + padding;
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes.buffer;
-}
-
-function base64UrlEncode(buffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-function encodeRegistrationCredential(credential) {
-    return {
-        id: credential.id,
-        rawId: base64UrlEncode(credential.rawId),
-        type: credential.type,
-        response: {
-            attestationObject: base64UrlEncode(credential.response.attestationObject),
-            clientDataJSON: base64UrlEncode(credential.response.clientDataJSON),
-            transports: credential.response.getTransports ? credential.response.getTransports() : []
-        },
-        extensions: credential.getClientExtensionResults()
-    };
-}
-
-function encodeAssertionCredential(assertion) {
-    return {
-        id: assertion.id,
-        rawId: base64UrlEncode(assertion.rawId),
-        type: assertion.type,
-        response: {
-            authenticatorData: base64UrlEncode(assertion.response.authenticatorData),
-            clientDataJson: base64UrlEncode(assertion.response.clientDataJSON),
-            signature: base64UrlEncode(assertion.response.signature),
-            userHandle: assertion.response.userHandle ? base64UrlEncode(assertion.response.userHandle) : null
-        },
-        extensions: assertion.getClientExtensionResults()
-    };
-}

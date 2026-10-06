@@ -87,7 +87,7 @@
             if (webAuthnSupported && hasPlatformKey && !autoTriggered)
             {
                 autoTriggered = true;
-                await DoPasskeyLogin(platformOnly: true);
+                await DoPasskeyLogin(automatic: true);
             }
         }
         catch
@@ -139,16 +139,15 @@
         Nav.NavigateTo("/", forceLoad: true);
     }
 
-    async Task DoPasskeyLogin(bool platformOnly = false)
+    async Task DoPasskeyLogin(bool automatic = false)
     {
         busy = true;
         error = string.Empty;
         try
         {
-            string? optionsJson = await Api.GetPasskeyLoginOptionsAsync(platform: platformOnly);
-            if (optionsJson == null) return;
-            string assertionJson = await JS.InvokeAsync<string>("owAuth.passkeyAuthenticate", optionsJson);
-            LoginResultDto result = await Api.CompletePasskeyLoginAsync(assertionJson);
+            string optionsJson = await Api.GetPasskeyLoginOptionsAsync(automatic ? null : username);
+            string credentialJson = await JS.InvokeAsync<string>("owAuth.passkeyAuthenticate", optionsJson);
+            LoginResultDto result = await Api.CompletePasskeyLoginAsync(new PasskeyLoginDto { CredentialJson = credentialJson });
 
             if (!string.IsNullOrEmpty(result.Error) || !result.Succeeded)
             {
@@ -165,7 +164,7 @@
         }
         catch
         {
-            if (!platformOnly)
+            if (!automatic)
                 error = "Passkey authentication failed.";
         }
         finally

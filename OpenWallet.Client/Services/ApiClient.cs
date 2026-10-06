@@ -67,16 +67,15 @@ public class ApiClient(HttpClient http)
         return r.IsSuccessStatusCode;
     }
 
-    public async Task<string> GetPasskeyRegisterOptionsAsync(RegisterPasskeyNameDto dto)
+    public async Task<string> GetPasskeyRegisterOptionsAsync()
     {
-        HttpResponseMessage r = await http.PostAsJsonAsync("api/auth/passkey/register/options", dto);
+        HttpResponseMessage r = await http.PostAsync("api/auth/passkey/register/options", null);
         return await r.Content.ReadAsStringAsync();
     }
 
-    public async Task<(PasskeyInfoDto? Info, string? Error)> CompletePasskeyRegisterAsync(string credentialJson)
+    public async Task<(PasskeyInfoDto? Info, string? Error)> CompletePasskeyRegisterAsync(CompletePasskeyRegistrationDto dto)
     {
-        using StringContent content = new(credentialJson, System.Text.Encoding.UTF8, "application/json");
-        HttpResponseMessage r = await http.PostAsync("api/auth/passkey/register/complete", content);
+        HttpResponseMessage r = await http.PostAsJsonAsync("api/auth/passkey/register/complete", dto);
         if (!r.IsSuccessStatusCode)
         {
             string body = await r.Content.ReadAsStringAsync();
@@ -86,24 +85,24 @@ public class ApiClient(HttpClient http)
         return (info, null);
     }
 
-    public async Task<bool> DeletePasskeyAsync(int id)
+    public async Task<bool> DeletePasskeyAsync(string id)
     {
-        HttpResponseMessage r = await http.DeleteAsync($"api/auth/passkey/{id}");
+        HttpResponseMessage r = await http.DeleteAsync($"api/auth/passkey/{Uri.EscapeDataString(id)}");
         return r.IsSuccessStatusCode;
     }
 
-    public async Task<string?> GetPasskeyLoginOptionsAsync(bool platform = false)
+    public async Task<string> GetPasskeyLoginOptionsAsync(string? username = null)
     {
-        string url = platform ? "api/auth/passkey/login/options?platform=true" : "api/auth/passkey/login/options";
+        string url = string.IsNullOrWhiteSpace(username)
+            ? "api/auth/passkey/login/options"
+            : $"api/auth/passkey/login/options?username={Uri.EscapeDataString(username)}";
         HttpResponseMessage r = await http.PostAsync(url, null);
-        if (r.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
         return await r.Content.ReadAsStringAsync();
     }
 
-    public async Task<LoginResultDto> CompletePasskeyLoginAsync(string assertionJson)
+    public async Task<LoginResultDto> CompletePasskeyLoginAsync(PasskeyLoginDto dto)
     {
-        using StringContent content = new(assertionJson, System.Text.Encoding.UTF8, "application/json");
-        HttpResponseMessage r = await http.PostAsync("api/auth/passkey/login/complete", content);
+        HttpResponseMessage r = await http.PostAsJsonAsync("api/auth/passkey/login/complete", dto);
         return await r.Content.ReadFromJsonAsync<LoginResultDto>() ?? new();
     }
 

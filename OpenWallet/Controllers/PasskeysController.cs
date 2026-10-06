@@ -1,199 +1,139 @@
-using System.Text;
-using System.Text.Json;
-using Fido2NetLib;
-using Fido2NetLib.Objects;
+using System.Buffers.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
-using OpenWallet.Database;
-using OpenWallet.Database.Models;
 using OpenWallet.Shared.DTOs;
 
 namespace OpenWallet.Controllers;
 
+/// <summary>
+/// Passkeys through ASP.NET Core Identity. A passkey belongs to the address it was created on, taken
+/// from the request's Host header, so behind a reverse proxy the original Host must be passed on.
+/// </summary>
 [ApiController]
 [Route("api/auth/passkey")]
 [Authorize]
 public class PasskeysController(
-    IFido2 fido2,
-    IMemoryCache cache,
     UserManager<IdentityUser> userManager,
     SignInManager<IdentityUser> signInManager,
-    AppDbContext db) : ControllerBase
+    ILogger<PasskeysController> logger) : ControllerBase
 {
-    const string LoginCacheKey = "passkey_login_options";
-
-    /// <summary>Begins passkey registration — returns CredentialCreateOptions.</summary>
+    /// <summary>Begins passkey registration — returns the WebAuthn creation options as JSON.</summary>
     [HttpPost("register/options")]
-    public async Task<IActionResult> RegisterOptions([FromBody] RegisterPasskeyNameDto dto)
+    public async Task<IActionResult> RegisterOptions()
     {
         IdentityUser? user = await userManager.GetUserAsync(User);
         if (user == null) return NotFound();
 
-        List<PublicKeyCredentialDescriptor> existingKeys = db.PasskeyCredentials
-            .Where(p => p.UserId == user.Id)
-            .AsEnumerable()
-            .Select(p => new PublicKeyCredentialDescriptor(p.CredentialId))
-            .ToList();
-
-        Fido2User fido2User = new()
+        string userName = user.UserName!;
+        string optionsJson = await signInManager.MakePasskeyCreationOptionsAsync(new PasskeyUserEntity
         {
-            Id = Encoding.UTF8.GetBytes(user.Id),
-            Name = user.UserName!,
-            DisplayName = user.UserName!
-        };
-
-        CredentialCreateOptions options = fido2.RequestNewCredential(new RequestNewCredentialParams
-        {
-            User = fido2User,
-            ExcludeCredentials = existingKeys,
-            AuthenticatorSelection = new AuthenticatorSelection
-            {
-                AuthenticatorAttachment = dto.Platform ? AuthenticatorAttachment.Platform : AuthenticatorAttachment.CrossPlatform,
-                ResidentKey = ResidentKeyRequirement.Preferred,
-                UserVerification = UserVerificationRequirement.Preferred
-            },
-            AttestationPreference = AttestationConveyancePreference.None
+            Id = user.Id,
+            Name = userName,
+            DisplayName = userName
         });
-
-        string cacheKey = $"passkey_reg_{user.Id}";
-        cache.Set(cacheKey, (options, dto.Name), TimeSpan.FromMinutes(5));
-
-        return Ok(options);
+        return Content(optionsJson, "application/json");
     }
 
-    /// <summary>Completes passkey registration.</summary>
+    /// <summary>Completes passkey registration and stores the passkey under the given name.</summary>
     [HttpPost("register/complete")]
-    public async Task<IActionResult> RegisterComplete([FromBody] AuthenticatorAttestationRawResponse attestation)
+    public async Task<IActionResult> RegisterComplete(CompletePasskeyRegistrationDto dto)
     {
         IdentityUser? user = await userManager.GetUserAsync(User);
         if (user == null) return NotFound();
 
-        string cacheKey = $"passkey_reg_{user.Id}";
-        if (!cache.TryGetValue(cacheKey, out (CredentialCreateOptions Options, string Name) cached))
-            return BadRequest(new { error = "Registration session expired" });
-        cache.Remove(cacheKey);
-
-        RegisteredPublicKeyCredential result;
+        PasskeyAttestationResult attestation;
         try
         {
-            result = await fido2.MakeNewCredentialAsync(new MakeNewCredentialParams
-            {
-                AttestationResponse = attestation,
-                OriginalOptions = cached.Options,
-                IsCredentialIdUniqueToUserCallback = (args, ct) =>
-                {
-                    byte[] credId = args.CredentialId;
-                    bool unique = !db.PasskeyCredentials.Any(p => p.CredentialId == credId);
-                    return Task.FromResult(unique);
-                }
-            });
+            attestation = await signInManager.PerformPasskeyAttestationAsync(dto.CredentialJson);
         }
-        catch (Exception ex)
+        catch (InvalidOperationException)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(new { error = "Registration session expired. Please try again." });
         }
 
-        PasskeyCredential credential = new()
-        {
-            UserId = user.Id,
-            Name = cached.Name,
-            CredentialId = result.Id,
-            PublicKey = result.PublicKey,
-            SignCount = result.SignCount,
-            Transports = JsonSerializer.Serialize(result.Transports ?? []),
-            IsBackupEligible = result.IsBackupEligible,
-            IsBackedUp = result.IsBackedUp,
-            AaGuid = result.AaGuid,
-            CreatedAt = DateTime.UtcNow
-        };
+        if (!attestation.Succeeded)
+            return BadRequest(new { error = $"Could not add the passkey: {attestation.Failure.Message}" });
 
-        db.PasskeyCredentials.Add(credential);
-        await db.SaveChangesAsync();
+        attestation.Passkey.Name = dto.Name;
+        IdentityResult result = await userManager.AddOrUpdatePasskeyAsync(user, attestation.Passkey);
+        if (!result.Succeeded)
+            return BadRequest(new { error = "The passkey could not be added to your account." });
 
-        return Ok(new PasskeyInfoDto { Id = credential.Id, Name = credential.Name, CreatedAt = credential.CreatedAt });
+        return Ok(ToDto(attestation.Passkey));
     }
 
-    /// <summary>Deletes a registered passkey.</summary>
-    [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id)
+    /// <summary>Deletes a registered passkey by its Base64Url credential ID.</summary>
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string id)
     {
         IdentityUser? user = await userManager.GetUserAsync(User);
         if (user == null) return NotFound();
 
-        PasskeyCredential? credential = db.PasskeyCredentials
-            .FirstOrDefault(p => p.Id == id && p.UserId == user.Id);
-        if (credential == null) return NotFound();
+        byte[] credentialId;
+        try
+        {
+            credentialId = Base64Url.DecodeFromChars(id);
+        }
+        catch (FormatException)
+        {
+            return BadRequest(new { error = "Invalid passkey ID." });
+        }
 
-        db.PasskeyCredentials.Remove(credential);
-        await db.SaveChangesAsync();
-        return Ok();
+        IdentityResult result = await userManager.RemovePasskeyAsync(user, credentialId);
+        return result.Succeeded ? Ok() : NotFound();
     }
 
-    /// <summary>Begins passkey authentication — returns AssertionOptions. Does not require auth.</summary>
+    /// <summary>
+    /// Begins passkey authentication — returns the WebAuthn request options as JSON. Without a username
+    /// the browser offers the passkeys it has for this site.
+    /// </summary>
     [HttpPost("login/options")]
     [AllowAnonymous]
-    public IActionResult LoginOptions([FromQuery] bool platform = false)
+    public async Task<IActionResult> LoginOptions([FromQuery] string? username)
     {
-        List<PublicKeyCredentialDescriptor> allowedCreds = db.PasskeyCredentials
-            .AsEnumerable()
-            .Where(p => !platform || p.Transports.Contains("internal"))
-            .Select(p => new PublicKeyCredentialDescriptor(p.CredentialId))
-            .ToList();
-
-        if (platform && allowedCreds.Count == 0)
-            return NoContent();
-
-        AssertionOptions options = fido2.GetAssertionOptions(new GetAssertionOptionsParams
-        {
-            AllowedCredentials = allowedCreds,
-            UserVerification = UserVerificationRequirement.Preferred
-        });
-
-        cache.Set(LoginCacheKey, options, TimeSpan.FromMinutes(5));
-        return Ok(options);
+        IdentityUser? user = string.IsNullOrWhiteSpace(username) ? null : await userManager.FindByNameAsync(username);
+        string optionsJson = await signInManager.MakePasskeyRequestOptionsAsync(user);
+        return Content(optionsJson, "application/json");
     }
 
-    /// <summary>Completes passkey authentication and signs in. Does not require auth.</summary>
+    /// <summary>Completes passkey authentication and signs in. A passkey also counts as the second factor.</summary>
     [HttpPost("login/complete")]
     [AllowAnonymous]
-    public async Task<IActionResult> LoginComplete([FromBody] AuthenticatorAssertionRawResponse assertion)
+    public async Task<IActionResult> LoginComplete(PasskeyLoginDto dto)
     {
-        if (!cache.TryGetValue(LoginCacheKey, out AssertionOptions? options) || options == null)
-            return BadRequest(new { error = "Authentication session expired" });
-        cache.Remove(LoginCacheKey);
-
-        byte[] credentialId = assertion.RawId;
-        List<PasskeyCredential> allCredentials = db.PasskeyCredentials.ToList();
-        PasskeyCredential? storedCredential = allCredentials
-            .FirstOrDefault(p => p.CredentialId.SequenceEqual(credentialId));
-        if (storedCredential == null)
-            return BadRequest(new { error = "Credential not found" });
-
-        IdentityUser? user = await userManager.FindByIdAsync(storedCredential.UserId);
-        if (user == null) return BadRequest(new { error = "User not found" });
-
-        VerifyAssertionResult assertionResult = await fido2.MakeAssertionAsync(new MakeAssertionParams
+        PasskeyAssertionResult<IdentityUser> assertion;
+        try
         {
-            AssertionResponse = assertion,
-            OriginalOptions = options,
-            StoredPublicKey = storedCredential.PublicKey,
-            StoredSignatureCounter = storedCredential.SignCount,
-            IsUserHandleOwnerOfCredentialIdCallback = (args, ct) =>
+            assertion = await signInManager.PerformPasskeyAssertionAsync(dto.CredentialJson);
+        }
+        catch (InvalidOperationException)
+        {
+            return Ok(new LoginResultDto { Error = "Passkey sign-in expired. Please try again." });
+        }
+
+        if (!assertion.Succeeded)
+        {
+            logger.LogWarning("Passkey sign-in failed for {Host}: {Reason}", Request.Host, assertion.Failure.Message);
+            return Ok(new LoginResultDto
             {
-                string userId = Encoding.UTF8.GetString(args.UserHandle);
-                bool owns = db.PasskeyCredentials
-                    .AsEnumerable()
-                    .Any(p => p.CredentialId.SequenceEqual(args.CredentialId) && p.UserId == userId);
-                return Task.FromResult(owns);
-            }
-        });
+                Error = $"That passkey didn't work: {assertion.Failure.Message} A passkey only works on the address it was created on."
+            });
+        }
 
-        storedCredential.SignCount = assertionResult.SignCount;
-        await db.SaveChangesAsync();
+        IdentityUser user = assertion.User;
+        if (await userManager.IsLockedOutAsync(user))
+            return Ok(new LoginResultDto { Error = "Account is locked. Try again later." });
 
-        await signInManager.SignInAsync(user, isPersistent: true);
+        await userManager.AddOrUpdatePasskeyAsync(user, assertion.Passkey);
+        await signInManager.SignInAsync(user, isPersistent: true, authenticationMethod: "passkey");
         return Ok(new LoginResultDto { Succeeded = true, Username = user.UserName! });
     }
+
+    internal static PasskeyInfoDto ToDto(UserPasskeyInfo passkey) => new()
+    {
+        Id = Base64Url.EncodeToString(passkey.CredentialId),
+        Name = passkey.Name ?? "Passkey",
+        CreatedAt = passkey.CreatedAt.UtcDateTime
+    };
 }

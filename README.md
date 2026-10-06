@@ -44,6 +44,24 @@ Data is persisted in two named Docker volumes:
 - `pgdata` — PostgreSQL data
 - `uploads` — record attachments
 
+### Behind a reverse proxy (HTTPS)
+
+To reach OpenWallet from outside your home network, put it behind a reverse proxy that handles
+HTTPS, such as Caddy, Traefik or nginx:
+
+1. Set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` on the app (commented out in
+   `docker-compose.yml`), so OpenWallet knows the original request was HTTPS.
+2. Make the proxy pass on the original `Host` header and set `X-Forwarded-Proto`. Caddy does both
+   by default. With nginx, add `proxy_set_header Host $host;` and
+   `proxy_set_header X-Forwarded-Proto $scheme;`.
+3. Let attachments through: nginx accepts only 1 MB by default, so add
+   `client_max_body_size 50m;` (Caddy and Traefik have no limit by default).
+
+**Passkeys** need HTTPS (browsers only allow them on `localhost` without it). A passkey belongs to
+the address you created it on, taken from the `Host` header. So create passkeys through the address
+you normally use, and don't change that address later, or the passkeys stop working. Passwords and
+authenticator codes keep working either way.
+
 ### Automatic updates
 
 Every push to `main` publishes the image as `ghcr.io/khalloufhassan/openwallet:latest` (and

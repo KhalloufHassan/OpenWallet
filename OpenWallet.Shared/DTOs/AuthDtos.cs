@@ -59,13 +59,18 @@ public class SecurityStatusDto
 
 public class PasskeyInfoDto
 {
-    public int Id { get; set; }
+    public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
 }
 
-public class RegisterPasskeyNameDto
+public class CompletePasskeyRegistrationDto
 {
     public string Name { get; set; } = string.Empty;
-    public bool Platform { get; set; }
+    public string CredentialJson { get; set; } = string.Empty;
+}
+
+public class PasskeyLoginDto
+{
+    public string CredentialJson { get; set; } = string.Empty;
 }

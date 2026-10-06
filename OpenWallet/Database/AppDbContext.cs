@@ -18,7 +18,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
     public DbSet<TemplateTag> TemplateTags => Set<TemplateTag>();
     public DbSet<Debt> Debts => Set<Debt>();
     public DbSet<DebtRecord> DebtRecords => Set<DebtRecord>();
-    public DbSet<PasskeyCredential> PasskeyCredentials => Set<PasskeyCredential>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
