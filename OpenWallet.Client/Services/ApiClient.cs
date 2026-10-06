@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components.Forms;
@@ -261,26 +262,28 @@ public class ApiClient(HttpClient http)
     public async Task<DashboardDto> GetDashboardAsync(DateTime? from = null, DateTime? to = null)
     {
         string query = string.Empty;
-        if (from.HasValue) query += $"from={from.Value:O}&";
-        if (to.HasValue) query += $"to={to.Value:O}";
+        if (from.HasValue) query += $"from={FormatDate(from.Value)}&";
+        if (to.HasValue) query += $"to={FormatDate(to.Value)}";
         return await http.GetFromJsonAsync<DashboardDto>($"api/stats/dashboard?{query}") ?? new();
     }
 
     public async Task<List<CategoryExpenseDto>> GetExpensesByCategoryAsync(DateTime from, DateTime to) =>
         await http.GetFromJsonAsync<List<CategoryExpenseDto>>(
-            $"api/stats/expenses-by-category?from={from:O}&to={to:O}") ?? [];
+            $"api/stats/expenses-by-category?from={FormatDate(from)}&to={FormatDate(to)}") ?? [];
 
     public async Task<List<TagExpenseDto>> GetExpensesByTagAsync(DateTime from, DateTime to) =>
         await http.GetFromJsonAsync<List<TagExpenseDto>>(
-            $"api/stats/expenses-by-tag?from={from:O}&to={to:O}") ?? [];
+            $"api/stats/expenses-by-tag?from={FormatDate(from)}&to={FormatDate(to)}") ?? [];
 
     public async Task<List<BalanceTrendDto>> GetBalanceTrendAsync(DateTime? from = null, DateTime? to = null)
     {
         string query = string.Empty;
-        if (from.HasValue) query += $"from={from.Value:O}&";
-        if (to.HasValue)   query += $"to={to.Value:O}";
+        if (from.HasValue) query += $"from={FormatDate(from.Value)}&";
+        if (to.HasValue)   query += $"to={FormatDate(to.Value)}";
         return await http.GetFromJsonAsync<List<BalanceTrendDto>>($"api/stats/balance-trend?{query}") ?? [];
     }
+
+    private static string FormatDate(DateTime dt) => dt.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture);
 
     private static string BuildRecordQuery(RecordFilterDto f)
     {
@@ -289,8 +292,8 @@ public class ApiClient(HttpClient http)
         if (f.CategoryId.HasValue) parts.Add($"categoryId={f.CategoryId}");
         if (f.StoreId.HasValue) parts.Add($"storeId={f.StoreId}");
         if (f.Type.HasValue) parts.Add($"type={f.Type}");
-        if (f.FromDate.HasValue) parts.Add($"fromDate={f.FromDate.Value:O}");
-        if (f.ToDate.HasValue) parts.Add($"toDate={f.ToDate.Value:O}");
+        if (f.FromDate.HasValue) parts.Add($"fromDate={FormatDate(f.FromDate.Value)}");
+        if (f.ToDate.HasValue) parts.Add($"toDate={FormatDate(f.ToDate.Value)}");
         if (!string.IsNullOrWhiteSpace(f.Search)) parts.Add($"search={Uri.EscapeDataString(f.Search)}");
         foreach (int tagId in f.TagIds) parts.Add($"tagIds={tagId}");
         parts.Add($"page={f.Page}");

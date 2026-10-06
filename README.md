@@ -44,6 +44,37 @@ Data is persisted in two named Docker volumes:
 - `pgdata` — PostgreSQL data
 - `uploads` — record attachments
 
+### Automatic updates
+
+Every push to `main` publishes the image as `ghcr.io/khalloufhassan/openwallet:latest` (and
+`:sha-<commit>`, to go back to an earlier version). To have a server update itself, run that image
+instead of building it, and add [Watchtower](https://github.com/nicholas-fedor/watchtower), which
+checks for a new image every few minutes and restarts OpenWallet with it. In `docker-compose.yml`
+(or a TrueNAS custom app's YAML):
+
+```yaml
+services:
+  app:
+    image: ghcr.io/khalloufhassan/openwallet:latest   # instead of build:
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    # …the rest as before
+
+  watchtower:
+    image: nickfedor/watchtower:latest
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"     # only update containers with the label above
+      WATCHTOWER_POLL_INTERVAL: "300"     # seconds
+      WATCHTOWER_CLEANUP: "true"          # delete the old images
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+The database stays on its pinned `postgres:18` image. To go back to an earlier version, replace
+`latest` with one of the `sha-…` tags listed on the repository's Packages page. After an update,
+hard-refresh the browser to load the new Blazor client.
+
 ## Running Locally (Development)
 
 **Prerequisites:** .NET 10 SDK, PostgreSQL instance
