@@ -36,6 +36,8 @@
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+    <!-- The app lock: fingerprint, face or the device PIN. -->
+    <PackageReference Include="Xamarin.AndroidX.Biometric" />
   </ItemGroup>
 
   <ItemGroup>
