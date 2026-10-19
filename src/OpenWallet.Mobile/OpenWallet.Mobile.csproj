@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- The Android app: .NET MAUI Blazor Hybrid, showing the pages of OpenWallet.UI in a native web view.
+       Building it needs the maui-android workload, so it isn't in OpenWallet.slnx or the Docker image;
+       see "Android app" in the README. -->
+
+  <PropertyGroup>
+    <!-- Replaces Directory.Build.props' net10.0. For iOS later: TargetFrameworks with net10.0-ios too. -->
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>OpenWallet.Mobile</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <EnableDefaultCssItems>false</EnableDefaultCssItems>
+
+    <ApplicationTitle>OpenWallet</ApplicationTitle>
+    <ApplicationId>org.khallouflabs.openwallet</ApplicationId>
+    <!-- Release builds set both from the android-vX.Y.Z tag and the build number (.github/workflows/android-release.yml).
+         ApplicationVersion must always go up, or Android refuses to install the update. -->
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+
+    <!-- An APK can be installed directly (from GitHub releases); Google Play would want an AAB instead. -->
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+
+    <!-- Android 7.0: the oldest the Blazor web view supports. -->
+    <SupportedOSPlatformVersion>24.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" ForegroundScale="0.65" Color="#161B22" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#0D1117" BaseSize="128,128" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenWallet.Shared\OpenWallet.Shared.csproj" />
+    <ProjectReference Include="..\OpenWallet.UI\OpenWallet.UI.csproj" />
+    <ProjectReference Include="..\OpenWallet.Mobile.Core\OpenWallet.Mobile.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The favicon is the web app's, copied in (git ignores the copy). -->
+  <Target Name="CopySharedWebFiles" AfterTargets="Restore" BeforeTargets="BeforeBuild">
+    <Copy SourceFiles="..\OpenWallet.Server\wwwroot\favicon.svg" DestinationFolder="wwwroot" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

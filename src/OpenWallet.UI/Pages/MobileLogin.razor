@@ -1,0 +1,88 @@
+@page "/mobile-login"
+@layout AuthPageLayout
+@using OpenWallet.UI.Services
+@using OpenWallet.Shared.Constants
+@using OpenWallet.Shared.DTOs
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>Sign in to the app - OpenWallet</PageTitle>
+
+@* The mobile app opens this page in the browser to sign in with a passkey. Visitors who aren't signed
+   in go through the login page first and come back here. Asking before handing the app its sign-in
+   means another app on the phone can't use this page to sign in silently. *@
+<div class="widget-card" style="width:100%;max-width:380px;">
+    <div class="text-center mb-4">
+        <i class="bi bi-wallet2 fs-1 text-primary"></i>
+        <h4 class="mt-2 mb-0 fw-semibold">OpenWallet</h4>
+    </div>
+
+    @if (!MobileApp.IsValidChallenge(Challenge))
+    {
+        <h6 class="fw-semibold">This link isn't valid</h6>
+        <p class="text-muted small mb-0">Start signing in again from the OpenWallet app.</p>
+    }
+    else if (me == null)
+    {
+        <div class="text-center text-muted py-3">
+            <span class="spinner-border spinner-border-sm me-2"></span>Loading…
+        </div>
+    }
+    else if (callback != null)
+    {
+        <h6 class="fw-semibold">You're signed in</h6>
+        <p class="text-muted small">You can close the browser and go back to the app.</p>
+        <a class="btn btn-primary w-100" href="@callback">Return to the App</a>
+    }
+    else
+    {
+        <h6 class="fw-semibold">Sign in to the app?</h6>
+        <p class="text-muted small">
+            The OpenWallet app on this device is asking to sign in as <strong>@me.Username</strong>.
+            Only continue if you just started signing in from the app.
+        </p>
+        @if (!string.IsNullOrEmpty(error))
+        {
+            <div class="alert alert-danger py-2 small">@error</div>
+        }
+        <button class="btn btn-primary w-100" @onclick="Confirm" disabled="@busy">
+            @if (busy) { <span class="spinner-border spinner-border-sm me-2"></span> }
+            Sign in to the App
+        </button>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "challenge")] public string? Challenge { get; set; }
+
+    AuthMeDto? me;
+    string? callback;
+    string error = string.Empty;
+    bool busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!MobileApp.IsValidChallenge(Challenge)) return;
+
+        me = await Api.GetMeAsync();
+        if (me == null)
+            Nav.NavigateTo($"login?returnUrl={Uri.EscapeDataString(Nav.ToBaseRelativePath(Nav.Uri))}");
+    }
+
+    async Task Confirm()
+    {
+        busy = true;
+        error = string.Empty;
+        string? code = await Api.IssueMobileCodeAsync(Challenge!);
+        busy = false;
+
+        if (code == null)
+        {
+            error = "Couldn't sign the app in. Start again from the app.";
+            return;
+        }
+
+        callback = $"{MobileApp.CallbackUri}?code={Uri.EscapeDataString(code)}";
+        Nav.NavigateTo(callback, forceLoad: true);
+    }
+}

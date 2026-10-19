@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The mobile app's logic that doesn't need Android (or iOS): the server address, sign-in tokens
+       and the web view's API requests. Kept free of MAUI so it can be unit tested on any machine. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenWallet.Shared\OpenWallet.Shared.csproj" />
+    <ProjectReference Include="..\OpenWallet.UI\OpenWallet.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="OpenWallet.Mobile.Core.Tests" />
+  </ItemGroup>
+
+</Project>

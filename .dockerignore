@@ -10,3 +10,6 @@
 .env
 docker-compose*.yml
 Dockerfile
+tests/
+src/OpenWallet.Mobile/
+src/OpenWallet.Mobile.Core/

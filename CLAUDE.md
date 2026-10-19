@@ -8,7 +8,7 @@
 
 ## Blazor
 
-- **Always prefer reusable components** — if the same UI pattern appears more than once, extract it into a component under `OpenWallet.Client/Components/`.
+- **Always prefer reusable components** — if the same UI pattern appears more than once, extract it into a component under `src/OpenWallet.UI/Components/`.
 - Components accept strongly-typed parameters; never pass raw strings where a typed DTO or enum fits.
 - Use `EventCallback<T>` for child-to-parent communication.
 

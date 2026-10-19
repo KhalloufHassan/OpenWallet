@@ -22,6 +22,7 @@ A self-hosted personal finance tracker built with .NET 10 Blazor WebAssembly and
 | Layer | Technology |
 |---|---|
 | Frontend | Blazor WebAssembly (.NET 10) |
+| Mobile | .NET MAUI Blazor Hybrid (Android) |
 | Backend | ASP.NET Core 10 |
 | Database | PostgreSQL 18 |
 | ORM | Entity Framework Core 9 (Npgsql) |
@@ -93,11 +94,74 @@ The database stays on its pinned `postgres:18` image. To go back to an earlier v
 `latest` with one of the `sha-…` tags listed on the repository's Packages page. After an update,
 hard-refresh the browser to load the new Blazor client.
 
+## Android app
+
+The app shows the same pages as the web app, talking to your own OpenWallet server. It needs the
+server to be reachable over HTTPS (see [Behind a reverse proxy](#behind-a-reverse-proxy-https)).
+
+### Install
+
+Download the latest `OpenWallet-x.y.z.apk` from the repository's
+[releases](https://github.com/KhalloufHassan/OpenWallet/releases) on the phone and open it (Android asks
+you to allow installing apps from the browser or file manager the first time).
+
+When the app first opens, enter your server's address and sign in with your username, password and
+authenticator code. **Use a Passkey** opens your server's login page in the browser; sign in there
+and confirm to come back to the app signed in. Passkeys are added from **Security** in the app, which
+opens the same page in the browser, since a passkey belongs to the server's address.
+
+The app stays signed in for 90 days without use (`Apps__RefreshTokenDays`). Changing your password
+signs it out within 30 minutes (`Apps__AccessTokenMinutes`).
+
+### Build and run it yourself
+
+You need the .NET SDK (from [Microsoft](https://dotnet.microsoft.com/download), not a Linux
+distribution's package, which can't install workloads), a JDK 17 or 21 and the Android SDK:
+
+```sh
+dotnet workload install maui-android
+# The Android SDK and JDK, if you don't have them (installs into the default locations):
+dotnet build src/OpenWallet.Mobile -t:InstallAndroidDependencies -p:AndroidSdkDirectory=$HOME/Android/Sdk -p:AcceptAndroidSdkLicenses=true
+
+# With the phone connected over USB (developer options → USB debugging), or `adb pair`/`adb connect` over Wi-Fi:
+dotnet build src/OpenWallet.Mobile -t:Run -p:AndroidSdkDirectory=$HOME/Android/Sdk
+```
+
+`OpenWallet.slnx` leaves the app out, so the server builds and tests without the Android tools; add
+`src/OpenWallet.Mobile/OpenWallet.Mobile.csproj` to your IDE's solution to work on it. The app's
+logic that doesn't need Android is in `OpenWallet.Mobile.Core`, tested with
+`dotnet test --project tests/OpenWallet.Mobile.Core.Tests`.
+
+The app needs a server with a certificate Android trusts (such as Let's Encrypt, as a reverse proxy
+provides): it never uses plain HTTP.
+
+### Releases
+
+Pushing a tag like `android-v1.2.0` builds a signed APK and publishes it as a GitHub release
+(`.github/workflows/android-release.yml`). Android only installs updates signed with the same key, so
+make the key once and keep it safe (a password manager is a good place):
+
+```sh
+keytool -genkeypair -v -keystore openwallet.keystore -alias openwallet -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 openwallet.keystore    # the value of the ANDROID_KEYSTORE_BASE64 secret
+```
+
+Then add the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` (`openwallet` above) and `ANDROID_KEY_PASSWORD` (the same as the keystore's
+unless you chose another), and release with:
+
+```sh
+git tag android-v1.0.0 && git push origin android-v1.0.0
+```
+
+A server can require a newer app with `Apps__MinimumVersion` (e.g. `1.2.0`); older apps then ask to
+be updated before signing in.
+
 ## Running Locally (Development)
 
 **Prerequisites:** .NET 10 SDK, PostgreSQL instance
 
-1. Update the connection string in `OpenWallet/appsettings.Development.json`:
+1. Update the connection string in `src/OpenWallet.Server/appsettings.Development.json`:
 
 ```json
 {
@@ -110,7 +174,7 @@ hard-refresh the browser to load the new Blazor client.
 2. Run the server (migrations are applied automatically on startup):
 
 ```bash
-dotnet run --project OpenWallet
+dotnet run --project src/OpenWallet.Server
 ```
 
 The Blazor WASM client is served by the same host. Open `https://localhost:5001` (or the port shown in the terminal).
@@ -118,21 +182,29 @@ The Blazor WASM client is served by the same host. Open `https://localhost:5001`
 ## Project Structure
 
 ```
-OpenWallet.sln
-├── OpenWallet/           # ASP.NET Core host — API controllers, EF Core, managers
-│   ├── Controllers/
-│   ├── Database/
-│   │   ├── Models/
-│   │   └── Migrations/
-│   └── Managers/
-├── OpenWallet.Client/    # Blazor WebAssembly app
-│   ├── Components/       # Reusable Blazor components
-│   ├── Layout/
-│   ├── Pages/
-│   └── Services/
-└── OpenWallet.Shared/    # DTOs and enums shared between server and client
-    ├── DTOs/
-    └── Models/
+OpenWallet.slnx
+├── src/
+│   ├── OpenWallet.Server/       # ASP.NET Core host — API controllers, EF Core, managers
+│   │   ├── Auth/                # Bearer tokens and passkey codes for the mobile app
+│   │   ├── Controllers/
+│   │   ├── Database/
+│   │   │   ├── Models/
+│   │   │   └── Migrations/
+│   │   └── Managers/
+│   ├── OpenWallet.UI/           # All pages and components, shared by the web app and the mobile app
+│   │   ├── Components/          # Reusable Blazor components
+│   │   ├── Layout/
+│   │   ├── Pages/
+│   │   ├── Services/            # ApiClient and the host abstractions (IAppHost, IAccountService…)
+│   │   └── wwwroot/             # CSS and JavaScript
+│   ├── OpenWallet.Client/       # Blazor WebAssembly entry point for the web app (cookie session)
+│   ├── OpenWallet.Mobile.Core/  # The mobile app's logic without Android: server address, tokens
+│   ├── OpenWallet.Mobile/       # The Android app (.NET MAUI Blazor Hybrid)
+│   └── OpenWallet.Shared/       # DTOs and enums shared between server and clients
+│       ├── DTOs/
+│       └── Models/
+└── tests/
+    └── OpenWallet.Mobile.Core.Tests/
 ```
 
 ## Default Categories

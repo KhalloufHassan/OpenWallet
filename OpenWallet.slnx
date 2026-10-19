@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OpenWallet.Client/OpenWallet.Client.csproj" />
+    <Project Path="src/OpenWallet.Mobile.Core/OpenWallet.Mobile.Core.csproj" />
+    <Project Path="src/OpenWallet.Server/OpenWallet.Server.csproj" />
+    <Project Path="src/OpenWallet.Shared/OpenWallet.Shared.csproj" />
+    <Project Path="src/OpenWallet.UI/OpenWallet.UI.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenWallet.Mobile.Core.Tests/OpenWallet.Mobile.Core.Tests.csproj" />
+  </Folder>
+</Solution>

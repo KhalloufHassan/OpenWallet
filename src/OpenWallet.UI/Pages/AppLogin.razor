@@ -1,0 +1,206 @@
+@page "/app-login"
+@layout AuthPageLayout
+@using OpenWallet.UI.Services
+@using OpenWallet.Shared.DTOs
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider Services
+@inject NavigationManager Nav
+
+<PageTitle>Sign in - OpenWallet</PageTitle>
+
+@* The mobile app's sign-in. (The web app signs in on /login.) *@
+<div class="widget-card" style="width:100%;max-width:380px;">
+    <div class="text-center mb-4">
+        <i class="bi bi-wallet2 fs-1 text-primary"></i>
+        <h4 class="mt-2 mb-0 fw-semibold">OpenWallet</h4>
+        <p class="text-muted small mt-1 mb-0">
+            @if (step == LoginStep.Server)
+            { <span>Connect to your server</span> }
+            else if (step == LoginStep.TwoFactor)
+            { <span>Enter your verification code</span> }
+            else if (Locked)
+            { <span>Session locked due to inactivity</span> }
+            else
+            { <span>Sign in to continue</span> }
+        </p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div class="alert alert-danger py-2 small">@error</div>
+    }
+
+    @if (signIn == null)
+    {
+        <a class="btn btn-primary w-100" href="login">Go to the login page</a>
+    }
+    else if (step == LoginStep.Server)
+    {
+        <div class="mb-4">
+            <label class="form-label small">Server address</label>
+            <input type="url" class="form-control" @bind="serverAddress" @onkeydown="OnKeyDown"
+                   placeholder="https://wallet.example.org" autocapitalize="none" autocomplete="url" />
+            <div class="form-text small">The address you open OpenWallet at in a browser. It must use HTTPS.</div>
+        </div>
+        <button class="btn btn-primary w-100 mb-2" @onclick="Connect" disabled="@busy">
+            @if (busy) { <span class="spinner-border spinner-border-sm me-2"></span> }
+            Continue
+        </button>
+        @if (signIn.ServerAddress != null)
+        {
+            <button class="btn btn-link w-100 text-muted small" @onclick="() => Go(LoginStep.Password)">Cancel</button>
+        }
+    }
+    else
+    {
+        <div class="d-flex align-items-center justify-content-between mb-3 small">
+            <span class="text-muted text-truncate me-2">@signIn.ServerAddress</span>
+            <button class="btn btn-link btn-sm p-0" @onclick="() => Go(LoginStep.Server)">Change</button>
+        </div>
+
+        @if (step == LoginStep.Password)
+        {
+            <div class="mb-3">
+                <label class="form-label small">Username</label>
+                <input class="form-control" @bind="username" @onkeydown="OnKeyDown" placeholder="Enter username"
+                       autocomplete="username" autocapitalize="none" />
+            </div>
+            <div class="mb-4">
+                <label class="form-label small">Password</label>
+                <input type="password" class="form-control" @bind="password" @onkeydown="OnKeyDown" placeholder="Enter password" autocomplete="current-password" />
+            </div>
+            <button class="btn btn-primary w-100 mb-2" @onclick="SignIn" disabled="@busy">
+                @if (busy) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                @(Locked ? "Unlock" : "Sign In")
+            </button>
+            <button class="btn btn-outline-secondary w-100" @onclick="SignInWithBrowser" disabled="@busy">
+                <i class="bi bi-key me-1"></i>Use a Passkey
+            </button>
+            <p class="text-muted small mt-2 mb-0">Opens your server's login page in the browser, where your passkeys work.</p>
+        }
+        else
+        {
+            <div class="mb-4">
+                <label class="form-label small">Authenticator Code</label>
+                <input class="form-control text-center letter-spacing-2" @bind="totpCode" @onkeydown="OnKeyDown"
+                       placeholder="000000" maxlength="6" autocomplete="one-time-code" inputmode="numeric" />
+            </div>
+            <button class="btn btn-primary w-100 mb-2" @onclick="SignIn" disabled="@busy">
+                @if (busy) { <span class="spinner-border spinner-border-sm me-2"></span> }
+                Verify
+            </button>
+            <button class="btn btn-link w-100 text-muted small" @onclick="() => Go(LoginStep.Password)">Back</button>
+        }
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "locked")] public bool Locked { get; set; }
+    [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
+
+    enum LoginStep { Server, Password, TwoFactor }
+
+    IAppSignIn? signIn;
+    LoginStep step;
+    string serverAddress = string.Empty;
+    string username = string.Empty;
+    string password = string.Empty;
+    string totpCode = string.Empty;
+    string error = string.Empty;
+    bool busy;
+
+    protected override void OnInitialized()
+    {
+        signIn = Services.GetService<IAppSignIn>();
+        step = signIn?.ServerAddress == null ? LoginStep.Server : LoginStep.Password;
+        serverAddress = signIn?.ServerAddress ?? string.Empty;
+    }
+
+    void Go(LoginStep next)
+    {
+        step = next;
+        error = string.Empty;
+        totpCode = string.Empty;
+    }
+
+    Task Connect() => Run(async () =>
+    {
+        await signIn!.SetServerAsync(serverAddress);
+        serverAddress = signIn.ServerAddress ?? string.Empty;
+        Go(LoginStep.Password);
+    });
+
+    Task SignIn() => Run(async () =>
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) return;
+        if (step == LoginStep.TwoFactor && string.IsNullOrWhiteSpace(totpCode)) return;
+
+        LoginResultDto result = await signIn!.SignInAsync(new AppLoginDto
+        {
+            Username = username,
+            Password = password,
+            TwoFactorCode = step == LoginStep.TwoFactor ? totpCode : null
+        });
+
+        if (result.Succeeded)
+        {
+            Done();
+        }
+        else if (result.RequiresTwoFactor && step == LoginStep.Password)
+        {
+            Go(LoginStep.TwoFactor);
+        }
+        else
+        {
+            error = result.Error ?? "Sign-in failed. Please try again.";
+            totpCode = string.Empty;
+        }
+    });
+
+    Task SignInWithBrowser() => Run(async () =>
+    {
+        await signIn!.SignInWithBrowserAsync();
+        Done();
+    });
+
+    async Task Run(Func<Task> action)
+    {
+        busy = true;
+        error = string.Empty;
+        try
+        {
+            await action();
+        }
+        catch (AppSignInException ex)
+        {
+            error = ex.Message;
+        }
+        catch (TaskCanceledException)
+        {
+        }
+        catch (HttpRequestException)
+        {
+            error = "Couldn't reach the server. Check your connection and try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    void Done()
+    {
+        string target = ReturnUrl is { Length: > 0 } url && Uri.IsWellFormedUriString(url, UriKind.Relative)
+            && !url.StartsWith("//") && !url.StartsWith("app-login")
+                ? url
+                : string.Empty;
+        Nav.NavigateTo(target, replace: true);
+    }
+
+    async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        if (step == LoginStep.Server) await Connect();
+        else await SignIn();
+    }
+}

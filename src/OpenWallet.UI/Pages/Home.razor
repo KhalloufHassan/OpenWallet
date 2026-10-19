@@ -1,0 +1,200 @@
+@page "/"
+@using OpenWallet.UI.Services
+@using OpenWallet.Shared.DTOs
+@implements IDisposable
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject PrivacyService Privacy
+
+<PageTitle>Dashboard - OpenWallet</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+    <h4 class="mb-0 fw-semibold">Dashboard</h4>
+    <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-secondary btn-sm @(filtersOpen ? "active" : "")"
+                @onclick="() => filtersOpen = !filtersOpen" title="Filters">
+            <i class="bi bi-sliders"></i>
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="() => Privacy.ToggleAsync()" title="Toggle privacy">
+            <i class="bi @(Privacy.IsMasked ? "bi-eye-slash" : "bi-eye")"></i>
+        </button>
+    </div>
+</div>
+
+@if (filtersOpen)
+{
+    <div class="widget-card mb-3">
+        <RecordFilterPanel Filter="filter"
+                           Accounts="accounts"
+                           Categories="categories"
+                           Stores="stores"
+                           Tags="tags"
+                           OnSearch="ApplyFilter"
+                           OnReset="ResetFilter" />
+    </div>
+}
+
+@if (loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary"></div>
+    </div>
+}
+else if (!string.IsNullOrEmpty(loadError))
+{
+    <div class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle me-2"></i>Failed to load dashboard: @loadError
+    </div>
+}
+else if (dashboard != null)
+{
+    <div class="d-flex flex-column gap-3">
+        <AccountBalancesWidget Dashboard="dashboard" IsMasked="Privacy.IsMasked" OnAccountClick="FilterByAccount" />
+        <RecentRecordsWidget Records="FilteredRecords.ToList()" OnRecordClick="GoToRecords" />
+        <div class="row g-3">
+            <div class="col-xl-6">
+                <ExpensesWidget ExpensesByCategory="FilteredExpensesByCategory.ToList()"
+                                ExpensesByTag="dashboard.ExpensesByTag"
+                                IsMasked="Privacy.IsMasked" />
+            </div>
+            <div class="col-xl-6">
+                <BalanceTrendWidget BalanceTrend="dashboard.BalanceTrend" />
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5 text-muted">
+        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+        No data yet. Add accounts and records to see your dashboard.
+    </div>
+}
+
+@code {
+    DashboardDto? dashboard;
+    List<CategoryDto> categories = [];
+    List<AccountDto> accounts = [];
+    List<StoreDto> stores = [];
+    List<TagDto> tags = [];
+    bool loading = true;
+    bool filtersOpen;
+    string loadError = string.Empty;
+
+    static RecordFilterDto DefaultFilter() => new()
+    {
+        FromDate = DateTime.Today.AddDays(-29),
+        ToDate = DateTime.Today
+    };
+
+    RecordFilterDto filter = DefaultFilter();
+
+    HashSet<int> ExpandedCategoryIds => filter.CategoryId.HasValue
+        ? CategoryAndDescendants(filter.CategoryId.Value, categories)
+        : [];
+
+    IEnumerable<RecordDto> FilteredRecords
+    {
+        get
+        {
+            IEnumerable<RecordDto> list = dashboard?.RecentRecords ?? [];
+            if (filter.AccountId.HasValue)
+                list = list.Where(r => r.AccountId == filter.AccountId.Value);
+            if (filter.CategoryId.HasValue)
+            {
+                HashSet<int> ids = ExpandedCategoryIds;
+                list = list.Where(r => ids.Contains(r.CategoryId));
+            }
+            if (filter.StoreId.HasValue)
+                list = list.Where(r => r.StoreId == filter.StoreId.Value);
+            if (filter.TagIds.Count > 0)
+                list = list.Where(r => r.Tags.Any(t => filter.TagIds.Contains(t.Id)));
+            if (filter.Type.HasValue)
+                list = list.Where(r => r.Type == filter.Type.Value);
+            if (!string.IsNullOrWhiteSpace(filter.Search))
+                list = list.Where(r => r.Notes.Contains(filter.Search, StringComparison.OrdinalIgnoreCase));
+            return list;
+        }
+    }
+
+    IEnumerable<CategoryExpenseDto> FilteredExpensesByCategory
+    {
+        get
+        {
+            if (!filter.CategoryId.HasValue) return dashboard?.ExpensesByCategory ?? [];
+            HashSet<int> ids = ExpandedCategoryIds;
+            return (dashboard?.ExpensesByCategory ?? []).Where(e => ids.Contains(e.CategoryId));
+        }
+    }
+
+    static HashSet<int> CategoryAndDescendants(int id, List<CategoryDto> tree)
+    {
+        HashSet<int> result = [id];
+        CategoryDto? cat = FlatAll(tree).FirstOrDefault(c => c.Id == id);
+        if (cat != null)
+            foreach (CategoryDto sub in cat.SubCategories)
+                result.Add(sub.Id);
+        return result;
+    }
+
+    static IEnumerable<CategoryDto> FlatAll(IEnumerable<CategoryDto> cats)
+    {
+        foreach (CategoryDto c in cats)
+        {
+            yield return c;
+            foreach (CategoryDto sub in FlatAll(c.SubCategories))
+                yield return sub;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Privacy.OnChanged += OnPrivacyChanged;
+        Task<List<CategoryDto>> loadCats = Api.GetCategoriesAsync();
+        Task<List<AccountDto>> loadAccounts = Api.GetAccountsAsync();
+        Task<List<StoreDto>> loadStores = Api.GetStoresAsync();
+        Task<List<TagDto>> loadTags = Api.GetTagsAsync();
+        await LoadData();
+        categories = await loadCats;
+        accounts = await loadAccounts;
+        stores = await loadStores;
+        tags = await loadTags;
+    }
+
+    void OnPrivacyChanged() => InvokeAsync(StateHasChanged);
+
+    async Task ApplyFilter() => await LoadData();
+
+    async Task ResetFilter()
+    {
+        filter = DefaultFilter();
+        await LoadData();
+    }
+
+    async Task LoadData()
+    {
+        loading = true;
+        loadError = string.Empty;
+        try
+        {
+            dashboard = await Api.GetDashboardAsync(filter.FromDate, filter.ToDate);
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    void FilterByAccount(int accountId)
+    {
+        filter.AccountId = accountId;
+        filtersOpen = true;
+    }
+
+    void GoToRecords(RecordDto _) => Nav.NavigateTo("records");
+    public void Dispose() => Privacy.OnChanged -= OnPrivacyChanged;
+}

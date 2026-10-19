@@ -83,3 +83,6 @@ Thumbs.db
 
 # Claude Code settings (keep project settings, ignore local overrides)
 .claude/settings.local.json
+
+# The mobile app's copy of the web app's favicon (made by its build)
+src/OpenWallet.Mobile/wwwroot/favicon.svg
